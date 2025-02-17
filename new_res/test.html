@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>骨龄检测</title>
+    <style>
+        /* 样式略 */
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>骨龄检测</h1>
+    <form id="ageDetectionForm" action="/upload" method="POST" enctype="multipart/form-data">
+        <!-- 性别选择 -->
+        <label for="gender">选择性别：</label>
+        <select id="gender" name="gender" required>
+            <option value="male">男</option>
+            <option value="female">女</option>
+        </select>
+
+        <!-- 图片上传 -->
+        <label for="image">上传图片：</label>
+        <input type="file" id="image" name="image" accept="image/*" required>
+
+        <!-- 提交按钮 -->
+        <button type="submit">提交</button>
+    </form>
+
+    <div id="result" style="display: none; margin-top: 20px;">
+        <h3>结果：</h3>
+        <p id="resultText"></p>
+    </div>
+</div>
+
+<script>
+    // 使用 FormData 处理表单提交并显示返回的结果
+    const form = document.getElementById('ageDetectionForm');
+    form.addEventListener('submit', function(event) {
+        event.preventDefault(); // 防止表单默认提交
+
+        const formData = new FormData(form);
+
+        // 发送 POST 请求到服务器
+        fetch('/upload', {  // 使用相对路径
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())  // 假设服务器返回 JSON 格式的结果
+        .then(data => {
+            // 假设返回的数据格式为 { "age": "12", "error": false }
+            if (data.error) {
+                document.getElementById('resultText').innerText = "发生错误，请重试！";
+            } else {
+                document.getElementById('resultText').innerText = `估算骨龄为：${data.age}岁`;
+            }
+            document.getElementById('result').style.display = 'block';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('resultText').innerText = "无法连接到服务器，请检查网络";
+            document.getElementById('result').style.display = 'block';
+        });
+    });
+</script>
+
+</body>
+</html>

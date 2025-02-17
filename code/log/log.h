@@ -51,7 +51,7 @@ private:
     bool _isOpen;               
  
     Buffer _buff;       // 输出的内容，缓冲区
-    int _level;         // 日志等级
+    int _level;         // 日志等级, 等级低的可以显示等级高的
     bool _isAsync;      // 是否开启异步日志
 
     // TODO: c++风格文件
@@ -63,7 +63,7 @@ private:
 
 #define LOG_BASE(level, format, ...) \
     do {\
-        Log* _log_ = Log::instance();\
+        Log* _log_ = Log::instance(); \
         if (_log_->isOpen() && _log_->getLevel() <= level) {\
             _log_->write(level, format, ##__VA_ARGS__); \
             _log_->flush();\

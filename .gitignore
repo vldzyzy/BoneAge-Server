@@ -1,6 +1,10 @@
 .vscode
 res
-*.log
+/log
+resources
+*.pcap
+*.onnx
+code/util
 
 # Prerequisites
 *.d

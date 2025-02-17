@@ -6,6 +6,8 @@
 #include <thread>
 #include <cassert>
 
+// 线程池类，提供了一个固定数量的工作线程，用于执行异步任务。
+// 任务通过 addTask() 方法添加到任务队列中，由工作线程异步处理。
 class ThreadPool {
 public:
     explicit ThreadPool(size_t threadCount = 8)

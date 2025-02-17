@@ -21,9 +21,9 @@ Log::~Log() {
 }
 
 void Log::flush() {
-    // if(_isAsync && _deque) {
-    //     _deque->flush();    // 唤醒异步队列
-    // }
+    if(_isAsync && _deque) {
+        _deque->flush();    // 唤醒异步队列
+    }
     if(_fp) {
         fflush(_fp);    // 刷新文件缓冲区
     }
@@ -77,7 +77,7 @@ void Log::init(int level, const char* path, const char* suffix, int maxQueCapaci
     
     {
         std::lock_guard<std::mutex> lock(_mutex);
-        _buff.RetrieveAll();
+        _buff.retrieveAll();
         if(_fp) {
             flush();
             fclose(_fp);
@@ -92,6 +92,7 @@ void Log::init(int level, const char* path, const char* suffix, int maxQueCapaci
 
 // TODO: 自己写一遍
 // 写入日志
+// 
 void Log::write(int level, const char* format, ...) {
     auto now = std::chrono::system_clock::now();
     auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -104,7 +105,6 @@ void Log::write(int level, const char* format, ...) {
     if (_toDay != sysTime.tm_mday || (_lineCount && (_lineCount % _MAX_LINES == 0))) {
         std::ostringstream oss;
         oss << _path << "/" << std::put_time(&sysTime, "%Y_%m_%d");
-        auto tt = oss.str().c_str();
 
         if (_toDay != sysTime.tm_mday) {  // 新的一天
             oss << _suffix;
@@ -135,43 +135,43 @@ void Log::write(int level, const char* format, ...) {
                 
         std::lock_guard<std::mutex> lock(_mutex);
         ++_lineCount;
-        _buff.Append(oss.str().c_str(), oss.str().size());
+        _buff.append(oss.str().c_str(), oss.str().size());
 
         _appendLogLevelTitle(level);
 
         va_start(vaList, format);
-        auto _wb = _buff.WritableBytes() -  10;
-        int m = vsnprintf(_buff.BeginWrite(), _wb, format, vaList);
+        auto _wb = _buff.writableBytes() -  10;
+        int m = vsnprintf(_buff.beginWrite(), _wb, format, vaList);
         va_end(vaList);
 
-        _buff.HasWritten((m > _wb) ? _wb - 1 : m);
-        _buff.Append("\n\0", 2);
+        _buff.hasWritten((m > _wb) ? _wb - 1 : m);
+        _buff.append("\n\0", 2);
 
         if (_isAsync && _deque && !_deque->full()) {  // 异步模式
-            _deque->push_back(_buff.RetrieveAllToStr());
+            _deque->push_back(_buff.retrieveAllToStr());
         } else {  // 同步模式
-            fputs(_buff.Peek(), _fp);
+            fputs(_buff.peek(), _fp);
         }
-        _buff.RetrieveAll();
+        _buff.retrieveAll();
     }
 }
 
 void Log::_appendLogLevelTitle(int level) {
     switch(level) {
     case 0:
-        _buff.Append("[debug]: ", 9);
+        _buff.append("[debug]: ", 9);
         break;
     case 1:
-        _buff.Append("[info] : ", 9);
+        _buff.append("[info] : ", 9);
         break;
     case 2:
-        _buff.Append("[warn] : ", 9);
+        _buff.append("[warn] : ", 9);
         break;
     case 3:
-        _buff.Append("[error]: ", 9);
+        _buff.append("[error]: ", 9);
         break;
     default:
-        _buff.Append("[info] : ", 9);
+        _buff.append("[info] : ", 9);
         break;
     }
 }
