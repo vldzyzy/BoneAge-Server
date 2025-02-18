@@ -76,14 +76,22 @@
 </div>
 
 <script>
-    // 使用 FormData 处理表单提交并显示返回的结果
+    // 最大文件大小：10MB
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+
     const form = document.getElementById('agepredictionForm');
     form.addEventListener('submit', function(event) {
         event.preventDefault(); // 防止表单默认提交
 
-        const formData = new FormData(form);
+        const imageInput = document.getElementById('image');
+        const file = imageInput.files[0];
 
-        console.log("Sending POST request...");
+        if (file && file.size > MAX_FILE_SIZE) {
+            alert('文件大小超过10MB，请选择更小的文件。');
+            return; // 不提交表单
+        }
+
+        const formData = new FormData(form);
         // 发送 POST 请求到服务器
         fetch('/predict', {  // 使用相对路径
             method: 'POST',
