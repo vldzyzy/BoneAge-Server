@@ -129,18 +129,17 @@ void Buffer::append(const Buffer& buff) {
 }
 
 // 从文件描述符读取数据到缓冲区
+// 保证一次能够读取完文件描述符里的数据，减少系统调用，具体为啥想想read系统调用传入的参数是啥。
 ssize_t Buffer::readFd(int fd, int* Errno) {
     char buff[65535];   // 栈区缓冲区，用于存储额外数据
     struct iovec iov[2];    // 分散读结构体
     size_t writeable = writableBytes();
-
     // 缓冲区的可写区域
     iov[0].iov_base = beginWrite();
     iov[0].iov_len = writeable;
     // 栈区缓冲区
     iov[1].iov_base = buff;
     iov[1].iov_len = sizeof(buff);
-
     // 使用readv从文件描述符读取数据
     ssize_t len = readv(fd, iov, 2);
     if(len < 0) {

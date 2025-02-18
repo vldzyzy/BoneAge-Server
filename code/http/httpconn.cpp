@@ -129,18 +129,34 @@ ssize_t HttpConn::write(int* saveErrno) {
  * @return bool 请求是否成功处理（返回 true 表示请求有效）
  */
 bool HttpConn::process() {
-    // 重置请求对象，准备解析新的请求报文
-    _request.init();
+    // 重置请求对象，准备解析新的请求报文, 但是在处理读取 长http请求时 不应该重置
+    // _request.init();  
     // 如果读缓冲区没有可读数据，则返回 false
     if(_readBuff.readableBytes() <= 0) {
         return false;
     }
     // 尝试解析 HTTP 请求报文
-    else if(_request.parse(_readBuff)) {
+    HTTP_CODE ret = _request.parse(_readBuff);
+    // 请求不完整，接着读socket缓冲区内容
+    if(ret == NO_REQUEST) {
+        return false;   
+    }
+    else if(ret == GET_REQUEST) {
         LOG_DEBUG("%s", _request.path().c_str());
-        // 如果解析成功，根据请求生成响应，状态码设为 200
-        _response.init(srcDir, _request.path(), _request.isKeepAlive(), 200);
-    } else {
+        // 判断是否为算法推理请求：例如 POST 方法且请求路径为 "/predict"
+        if(_request.method() == "POST" && _request.path() == "/predict") {
+            // 使用带上传数据参数的 init 接口，将 _uploadImage 与 _uploadText 直接传入，不经过复制
+            _response.init(srcDir, _request.path(), _request.isKeepAlive(), 200,
+                           _request.getPost("gender"),
+                           _request.getUploadImage());
+        }
+        else {  // 静态资源
+            // 如果解析成功，根据请求生成响应，状态码设为 200
+            _response.init(srcDir, _request.path(), _request.isKeepAlive(), 200);
+        }
+        _request.init(); // 如果是长连接，等待下一次请求，需要初始化
+    } 
+    else {    
         // 解析失败则生成 400 错误响应
         _response.init(srcDir, _request.path(), false, 400);
     }
@@ -158,6 +174,6 @@ bool HttpConn::process() {
         _iov[1].iov_len = _response.fileLen();
         _iovCnt = 2;
     }
-    LOG_DEBUG("filesize:%d, %d to %d", _response.fileLen() , _iovCnt, toWriteBytes());
+    LOG_DEBUG("filesize:%d, iovCnt: %d, Bytes to write: %d", _response.fileLen() , _iovCnt, toWriteBytes());
     return true;
 }

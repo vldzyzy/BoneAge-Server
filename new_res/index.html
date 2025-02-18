@@ -5,14 +5,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>骨龄检测</title>
     <style>
-        /* 样式略 */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f8ff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 400px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
+            font-size: 16px;
+            color: #555;
+        }
+        select, input[type="file"], button {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>骨龄检测</h1>
-    <form id="ageDetectionForm" action="/upload" method="POST" enctype="multipart/form-data">
+    <form id="agepredictionForm" action="/predict" method="POST" enctype="multipart/form-data">
         <!-- 性别选择 -->
         <label for="gender">选择性别：</label>
         <select id="gender" name="gender" required>
@@ -36,24 +77,29 @@
 
 <script>
     // 使用 FormData 处理表单提交并显示返回的结果
-    const form = document.getElementById('ageDetectionForm');
+    const form = document.getElementById('agepredictionForm');
     form.addEventListener('submit', function(event) {
         event.preventDefault(); // 防止表单默认提交
 
         const formData = new FormData(form);
 
+        console.log("Sending POST request...");
         // 发送 POST 请求到服务器
-        fetch('/upload', {  // 使用相对路径
+        fetch('/predict', {  // 使用相对路径
             method: 'POST',
             body: formData
         })
-        .then(response => response.json())  // 假设服务器返回 JSON 格式的结果
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('网络错误');
+            }
+            return response.json();  // 假设服务器返回 JSON
+        })
         .then(data => {
-            // 假设返回的数据格式为 { "age": "12", "error": false }
             if (data.error) {
                 document.getElementById('resultText').innerText = "发生错误，请重试！";
             } else {
-                document.getElementById('resultText').innerText = `估算骨龄为：${data.age}岁`;
+                document.getElementById('resultText').innerText = `哈哈，你上传的图片大小为${data.image}, 你的性别是${data.输入的文本}`;
             }
             document.getElementById('result').style.display = 'block';
         })

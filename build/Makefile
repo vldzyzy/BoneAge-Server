@@ -13,7 +13,7 @@ SRCS = $(wildcard ../code/buffer/*.cpp) \
        $(wildcard ../code/log/*.cpp) \
        $(wildcard ../code/pool/*.cpp) \
        $(wildcard ../code/server/*.cpp) \
-	   $(wildcard ../code/timer/*.cpp) \
+	$(wildcard ../code/timer/*.cpp) \
        ../code/test/server.cpp
 
 # -pthread 一个编译器/链接器选项，告诉编译器启用线程支持，并自动处理链接线程库的细节。

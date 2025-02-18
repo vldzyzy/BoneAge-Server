@@ -2,6 +2,8 @@
 
 using namespace std;
 
+constexpr char* CRLF = "\r\n";
+
 const std::unordered_set<std::string> HttpRequest::DEFAULT_HTML{   // 默认HTML路径
     "/index", "/register", "/login",
     "/welcome", "/video", "/picture",};  
@@ -11,70 +13,85 @@ const std::unordered_map<std::string, int> HttpRequest::DEFAULT_HTML_TAG{ // 特
 
 void HttpRequest::init() {
     _method = _path = _version = _body = "";
+    _linger = false;
+    _contentLen = 0;
     _state = REQUEST_LINE;
     _header.clear();
     _post.clear();
 }
 
-bool HttpRequest::isKeepAlive() const {
-    if(_header.count("Connection") == 1) {
-        return _header.find("Connection")->second == "keep-alive" && _version == "1.1";
-    }
-    return false;
-}
-
 // 传统的控制流程都是按照顺序执行的，状态机能 处理任意顺序的事件，并能提供有意义的响应—即使这些事件发生的顺序和预计的不同。
 // HTTP协议并未提供头部长度字段，并且头部长度的变化也很大。
-bool HttpRequest::parse(Buffer& buff) {
-    const char CRLF[] = "\r\n";
-    if(buff.readableBytes() <= 0) {
-        return false;
-    }
-    while(buff.readableBytes() && _state != FINISH) {
-        const char* lineEnd = search(buff.peek(), buff.beginWriteConst(), CRLF, CRLF + 2);
-        string line(buff.peek(), lineEnd);
+HTTP_CODE HttpRequest::parse(Buffer& buff) {
+    while(buff.readableBytes()) {
+        const char* lineEnd;
+        string line;
+        // 除了消息体，逐行解析
+        if (_state != BODY) {
+            //search，找到返回第一次出现 要查找的串 的起始位置，找不到返回beginWriteConst()
+            lineEnd = search(buff.peek(), buff.beginWriteConst(), CRLF, CRLF + 2);
+            //如果没找到CRLF，也不是BODY，那么一定不完整
+            if (lineEnd == buff.beginWrite()) return NO_REQUEST;
+            // line: 一行内容 包含换行符\r\n
+            line = std::string(buff.peek(), lineEnd);
+            buff.retrieveUntil(lineEnd + 2); // 除消息体外，都有换行符
+        }
+        else {
+            // 消息体读取全部内容，同时清空缓存
+            _body += buff.retrieveAllToStr();
+            if (_body.size() < _contentLen) {
+                return NO_REQUEST;
+            }
+        }
+        
         switch(_state) 
         {    
         // 有限状态自动机
 
-        case REQUEST_LINE:
-            if(!_parseRequestLine(line)) return false;
+        case REQUEST_LINE: {
+            HTTP_CODE ret = _parseRequestLine(line);
+            if (ret == BAD_REQUEST) {
+                return BAD_REQUEST;
+            }
             _parsePath();
             break;
-        
-        case HEADERS:
-            _parseHeader(line);
-            if(buff.readableBytes() <= 2) _state = FINISH;
+        }
+        case HEADERS: {
+            HTTP_CODE ret = _parseHeader(line);
+            // 内部根据content-length字段判断请求完整，提前结束
+            if (ret == GET_REQUEST) {
+                return GET_REQUEST;
+            }
             break;
-        
-        case BODY:
-            _parseBody(line);
+        }
+        case BODY: {
+            HTTP_CODE ret = _parseBody();
+            if(ret == GET_REQUEST) {
+                return GET_REQUEST;
+            }
             break;
+        }
         default:
             break;
         }
-        if(lineEnd == buff.beginWrite()) break;
-        buff.retrieveUntil(lineEnd + 2);
     }
+    LOG_DEBUG("state: %d", (int)_state);
+    LOG_DEBUG("content length: %d", _contentLen);
     LOG_DEBUG("[%s], [%s], [%s]", _method.c_str(), _path.c_str(), _version.c_str());
-    return true;
+    //缓存读空了，但请求还不完整，继续读
+    return NO_REQUEST;
 }
 
 void HttpRequest::_parsePath() {
     if(_path == "/") {
         _path = "/index.html";
     }
-    else {
-        for(auto &item : DEFAULT_HTML) {
-            if(item == _path) {
-                _path += ".html";
-                break;
-            }
-        }
+    else if(DEFAULT_HTML.count(_path)){
+        _path += ".html";
     }
 }
 
-bool HttpRequest::_parseRequestLine(const string& line) {
+HTTP_CODE HttpRequest::_parseRequestLine(const string& line) {
     regex pattern("^([^ ]*) ([^ ]*) HTTP/([^ ]*)$");
     smatch subMatch;
     if(regex_match(line, subMatch, pattern)) {
@@ -82,35 +99,36 @@ bool HttpRequest::_parseRequestLine(const string& line) {
         _path = subMatch[2];
         _version = subMatch[3];
         _state = HEADERS; // 状态转换为下一个状态
-        return true;
+        return NO_REQUEST;
     }
     LOG_ERROR("RequestLine Error");
-    return false;
+    LOG_DEBUG("%s", line);
+    return BAD_REQUEST;
 }
 
-void HttpRequest::_parseHeader(const string& line) {
+HTTP_CODE HttpRequest::_parseHeader(const string& line) {
     regex pattern("^([^:]*): ?(.*)$");
     smatch subMatch;
     if(regex_match(line, subMatch, pattern)) {
         _header[subMatch[1]] = subMatch[2];
+        if(subMatch[1] == "Connection") {
+            _linger = (subMatch[2] == "keep-alive");
+        }
+        if(subMatch[1] == "Content-Length") {
+            _contentLen = stoi(subMatch[2]);
+        }
+        return NO_REQUEST;
     }
-    else _state = BODY;
+    else if(_contentLen) {  // content-lenth是请求头最后一行，再过一行空行后，是请求体
+        _state = BODY;
+        return NO_REQUEST;
+    }
+    else {
+        return GET_REQUEST;
+    }
 }
 
-void HttpRequest::_parseBody(const string& line) {
-    _body = line;
-    _parsePost();
-    _state = FINISH;
-    LOG_DEBUG("Body:%s, len:%d", line.c_str(), line.size());
-}
-
-int HttpRequest::converHex(char ch) {
-    if(ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
-    if(ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
-    return ch;
-}
-
-void HttpRequest::_parsePost() {
+HTTP_CODE HttpRequest::_parseBody() {
     if (_method == "POST" && _header["Content-Type"].find("multipart/form-data") != std::string::npos) {
         // 解析 multipart/form-data 格式的数据
         _parseMultipartFormData();
@@ -120,9 +138,9 @@ void HttpRequest::_parsePost() {
         // 解析 POST 请求体中的表单数据（URL 编码格式）
         _parseFormUrlencoded();
 
-        // 检查当前请求路径是否是默认的 HTML 页面路径之一
+        // 检查当前请求路径是否是 特定 HTML 页面路径之一
         if (DEFAULT_HTML_TAG.count(_path)) {
-            // 获取对应的标签（用于注册或登录页面）
+            // 获取对应的标签（用于注册或登录页面） 
             int tag = DEFAULT_HTML_TAG.find(_path)->second;
             LOG_DEBUG("Tag:%d", tag);
 
@@ -140,10 +158,15 @@ void HttpRequest::_parsePost() {
             }
         }
     }
-
-
+    LOG_DEBUG("Body len:%d",_body.size());
+    return GET_REQUEST;
 }
 
+int HttpRequest::converHex(char ch) {
+    if(ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+    if(ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+    return ch;
+}
 
 void HttpRequest::_parseFormUrlencoded() {
     if(_body.size() == 0) { return; }
@@ -189,6 +212,31 @@ void HttpRequest::_parseFormUrlencoded() {
     }
 }
 
+// void HttpRequest::_parseFormData()
+// {
+//     if (_body.size() == 0) return;
+
+//     size_t st = 0, ed = 0;
+//     ed = _body.find(CRLF);
+//     string boundary = _body.substr(0, ed);
+
+//     // 解析文件信息
+//     st = _body.find("filename=\"", ed) + strlen("filename=\"");
+//     ed = _body.find("\"", st);
+//     _fileInfo["filename"] = _body.substr(st, ed - st);
+    
+//     // 解析文件内容，文件内容以\r\n\r\n开始
+//     st = _body.find("\r\n\r\n", ed) + strlen("\r\n\r\n");
+//     ed = _body.find(boundary, st) - 2; // 文件结尾也有\r\n
+//     string content = _body.substr(st, ed - st);
+
+//     ofstream ofs;
+//     // 如果文件分多次发送，应该采用app，同时为避免重复上传，应该用md5做校验
+//     ofs.open("./files/" + _fileInfo["filename"], ios::ate);
+//     ofs << content;
+//     ofs.close();
+// }
+
 void HttpRequest::_parseMultipartFormData() {
     const std::string boundary = "--" + _header["Content-Type"].substr(30); // 从Content-Type中提取boundary
     size_t boundaryPos = 0;
@@ -199,31 +247,53 @@ void HttpRequest::_parseMultipartFormData() {
         lastPos = boundaryPos + boundary.length();
         size_t endPos = _body.find(boundary, lastPos);
         if (endPos == std::string::npos) break;
-        std::string part = _body.substr(lastPos, endPos - lastPos);
+        // 使用 string_view 指向 _body 中这一段，避免复制
+        std::string_view part(_body.data() + lastPos, endPos - lastPos);
 
-        // 解析每个部分
-        if (part.find("Content-Disposition: form-data; name=\"file\"") != std::string::npos) {
-            // 解析文件部分
+        // 如果是图片部分（通过字段名判断）
+        if (part.find("Content-Disposition: form-data; name=\"image\"") != std::string::npos) {
             size_t filenamePos = part.find("filename=\"");
             if (filenamePos != std::string::npos) {
-                size_t fileStartPos = part.find("\r\n\r\n", filenamePos) + 4;
-                std::string fileData = part.substr(fileStartPos, part.length() - fileStartPos - 2); // 去掉 \r\n
-                // 保存文件到服务器
-                // saveFile(fileData);
+                size_t fileStartPos = part.find("\r\n\r\n", filenamePos);
+                if (fileStartPos != std::string::npos) {
+                    fileStartPos += 4;
+                    // 假定结尾有 "\r\n" 两个字节
+                    size_t fileDataLen = part.size() - fileStartPos - 2;
+                    // 直接引用 _body 内部对应位置的数据
+                    _uploadImage = std::string_view(_body.data() + lastPos + fileStartPos, fileDataLen);
+                    LOG_DEBUG("Uploaded image data size: %zu", fileDataLen);
+                }
             }
         }
         else {
-            // 解析文本数据
+            // 解析文本数据（如性别）
             size_t fieldNamePos = part.find("name=\"") + 6;
             size_t fieldEndPos = part.find("\"", fieldNamePos);
-            std::string key = part.substr(fieldNamePos, fieldEndPos - fieldNamePos);
+            
+            // 使用 std::string_view 提供的 find 和 substr 方法来处理
+            std::string_view keyView = part.substr(fieldNamePos, fieldEndPos - fieldNamePos);
+            std::string key(keyView);  // 如果需要 std::string，可以将 std::string_view 转换为 std::string
+            
             size_t valueStartPos = part.find("\r\n\r\n") + 4;
-            std::string value = part.substr(valueStartPos);
+            std::string_view valueView = part.substr(valueStartPos);
+
+            // 去除value两端的\r\n以及可能的空白字符
+            size_t start = valueView.find_first_not_of("\r\n ");
+            size_t end = valueView.find_last_not_of("\r\n ");
+            
+            // 使用 substr 提取真正的值
+            valueView = valueView.substr(start, end - start + 1);
+            
+            // 需要转换为 std::string 时，将 std::string_view 转为 std::string
+            std::string value(valueView);
+
             _post[key] = value;
-            LOG_DEBUG("Post: %s = %s", key.c_str(), value.c_str());
+            LOG_DEBUG("Uploaded text: %s = %s", key.c_str(), value.c_str());
         }
+
     }
 }
+
 
 void HttpRequest::saveFile(const std::string& fileData) {
     // 假设你希望将文件保存在一个指定的目录下
@@ -393,4 +463,9 @@ std::string HttpRequest::getPost(const char* key) const {
         return _post.find(key)->second;
     }
     return "";
+}
+
+bool HttpRequest:: isKeepAlive() const {
+    if (_header.count("Connection")) return _linger;
+    return false;
 }

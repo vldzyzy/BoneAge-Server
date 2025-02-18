@@ -38,7 +38,8 @@ HttpResponse::HttpResponse()
       _srcDir(""),          // 空字符串初始化
       _isKeepAlive(false),  // 默认为不保持连接
       _mmFile(nullptr),     // 映射文件指针初始化为 nullptr
-      _mmFileStat({0})      // 初始化文件状态为空
+      _mmFileStat({0}),     // 初始化文件状态为空
+      _isAlgorithm(false)  // 新增初始化标记
 {}
 
 
@@ -55,7 +56,27 @@ void HttpResponse::init(const std::string& srcDir, std::string& path, bool isKee
     _srcDir = srcDir;
     _mmFile = nullptr;
     _mmFileStat = { 0 };
+    _isAlgorithm = false;
 }
+
+// 新增：针对算法推理请求的初始化接口（不进行文件映射）
+void HttpResponse::init(const std::string& srcDir, const std::string& path, bool isKeepAlive, int code,
+            std::string uploadedText,
+            std::string_view uploadedImage) {
+    assert(srcDir != "");
+    if(_mmFile) unmapFile();
+    _code = code;
+    _isKeepAlive = isKeepAlive;
+    _path = path;
+    _srcDir = srcDir;
+    _mmFile = nullptr;
+    _mmFileStat = { 0 };
+    _isAlgorithm = true;
+    // 调用模型推理接口，注意这里传入的 image 为 string_view，不经过额外复制
+    _algoResult = inference(uploadedImage, uploadedText);
+    LOG_DEBUG("Algorithm inference result: %s", _algoResult.c_str());
+}
+
 
 /**
  * @brief 构建完整的HTTP响应报文
@@ -81,25 +102,36 @@ void HttpResponse::init(const std::string& srcDir, std::string& path, bool isKee
  * - 异常安全：所有系统资源通过RAII管理
  */
 void HttpResponse::makeResponse(Buffer& buff) {
-    // 资源不存在 或 是一个目录
-    if(stat((_srcDir + _path).data(), &_mmFileStat) < 0 || S_ISDIR(_mmFileStat.st_mode)) {
-        _code = 404;
+    if (_isAlgorithm) {
+            // 算法推理响应：直接返回 _algoResult 内容
+            _addState(buff);
+            _addHeader(buff);
+            buff.append("Content-type: application/json\r\n");
+            buff.append("Content-length: " + std::to_string(_algoResult.size()) + "\r\n\r\n");
+            buff.append(_algoResult);
     }
-    // 文件对其他用户不可读
-    else if(!(_mmFileStat.st_mode & S_IROTH)) {
-        _code = 403;
-    }
-    // 前两步通过，且状态码未被设置
-    else if (_code == -1) {
-        _code = 200;
-    }
+    else {
+        // 静态资源处理（原有逻辑）
+        // 资源不存在 或 是一个目录
+        if(stat((_srcDir + _path).data(), &_mmFileStat) < 0 || S_ISDIR(_mmFileStat.st_mode)) {
+            _code = 404;
+        }
+        // 文件对其他用户不可读
+        else if(!(_mmFileStat.st_mode & S_IROTH)) {
+            _code = 403;
+        }
+        // 前两步通过，且状态码未被设置
+        else if (_code == -1) {
+            _code = 200;
+        }
 
-    // 加载或生成错误页面
-    _errorHtml();
-    
-    _addState(buff);
-    _addHeader(buff);
-    _addContent(buff);
+        // 加载或生成错误页面
+        _errorHtml();
+        
+        _addState(buff);
+        _addHeader(buff);
+        _addContent(buff);
+    }
 }
 
 void HttpResponse::_addState(Buffer& buff) {
@@ -242,4 +274,24 @@ void HttpResponse::_errorHtml() {
         _path = CODE_PATH.find(_code)->second;  // 获取对应的错误页面路径
         stat((_srcDir + _path).data(), &_mmFileStat);  // 获取错误页面的文件状态
     }
+}
+
+// 临时
+// 模型推理接口：注意传入的 image 为 string_view，不经过复制
+std::string HttpResponse::inference(std::string_view image, std::string text) {
+    // 计算文件大小（字节）
+    size_t fileSizeInBytes = image.length();
+
+    // 转换为 KB（1 KB = 1024 字节）
+    double fileSizeInKB = static_cast<double>(fileSizeInBytes) / 1024.0;
+
+    std::string error_ = "false";
+
+
+    // 构造 JSON 格式的字符串，包含 "image" 和 "输入的文本" 两个字段
+    std::string jsonResult = "{\"image\": " + std::to_string(fileSizeInKB) +
+                             ", \"输入的文本\": \"" + text + "\"" +
+                             ", \"error\": false}";
+
+    return jsonResult;
 }

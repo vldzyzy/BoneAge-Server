@@ -256,13 +256,15 @@ void WebServer::_onRead(HttpConn* client) {
 /**
  * 根据HTTP请求处理结果修改关注的事件类型：
  * 如果有请求报文，则监控写事件；否则继续监控读事件
+ * 对于读，只要socket缓冲区中还有数据就一直读：每次读入操作后，主动epoll_mod IN事件，此时只要该fd的缓冲还有数据可以读，则epoll_wait会返回读就绪。
+ * 对于写，只要socket缓冲区中还有空间且用户请求写的数据还未写完，就一直写： 每次输出操作后，主动epoll_mod OUT事件，此时只要该fd的缓冲可以发送数据（发送buffer不满），则epoll_wait就会返回写就绪（有时候采用该机制通知epoll_wait醒过来）。
  */
 void WebServer::onProcess(HttpConn* client) {
     if(client->process()) {     // 处理 HTTP 请求，解析请求报文并生成响应。客户端请求报文有效 -》 修改为：监听该客户端可写事件
         _epoller->modFd(client->getFd(), _connEvent | EPOLLOUT);
     }
-    else {  // 请求报文无效或不是请求报文 -》 继续监听该客户端可读事件
-        _epoller->modFd(client->getFd(), _connEvent | EPOLLIN);
+    else {  // 请求报文无效、请求报文不完整 -》 继续监听该客户端可读事件
+        _epoller->modFd(client->getFd(), _connEvent | EPOLLIN);     // 注意这行代码的作用，不仅仅是继续监听可读的字面意思，而是再次注册IN事件，相当于一次更新，即实现 socket缓冲区中有数据 还能够立即就绪
     }
 }
 
