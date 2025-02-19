@@ -9,6 +9,7 @@ int main() {
     int trigMode = 3;             // 触发模式：监听和连接均使用 ET 模式
     int timeoutMS = 60000;         // 连接超时 60 s
     bool optLinger = false;       // 不启用 SO_LINGER 优雅关闭
+    const char* sqlHost = "";         // 数据库host
     int sqlPort = 3306;           // 数据库端口（根据实际情况设置）
     const char* sqlUser = "root"; // 数据库用户名
     const char* sqlPwd = "ZYzy@2025+-*"; // 数据库密码
@@ -21,7 +22,7 @@ int main() {
 
     // 创建 WebServer 实例
     WebServer server(port, trigMode, timeoutMS, optLinger,
-                     sqlPort, sqlUser, sqlPwd, dbName, connPoolNum,
+                     sqlHost, sqlPort, sqlUser, sqlPwd, dbName, connPoolNum,
                      threadNum, openLog, logLevel, logQueSize);
 
     // 在子线程中启动服务器（start() 会进入事件循环）

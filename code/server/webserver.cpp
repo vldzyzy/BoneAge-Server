@@ -3,9 +3,9 @@
 using namespace std;
 
 WebServer::WebServer(int port, int trigMode, int timeoutMS, bool optLinger,
-                    int sqlPort, const char* sqlUser, const char* sqlPwd,
-                    const char* dbName, int connPoolNum, int threadNum,
-                    bool openLog, int logLevel, int logQueSize)
+                    const char* sqlHost, int sqlPort, const char* sqlUser,
+                    const char* sqlPwd, const char* dbName, int connPoolNum,
+                    int threadNum, bool openLog, int logLevel, int logQueSize)
                 : _port(port)
                 , _openLinger(optLinger)
                 , _timeoutMS(timeoutMS)
@@ -26,7 +26,7 @@ WebServer::WebServer(int port, int trigMode, int timeoutMS, bool optLinger,
                     if(openLog) Log::instance()->init(logLevel, "./log", ".log", logQueSize);
 
                     // 初始化sql连接池（单例）
-                    SqlConnPool::instance()->init("localhost", sqlPort, sqlUser, sqlPwd, dbName, connPoolNum);
+                    SqlConnPool::instance()->init(sqlHost, sqlPort, sqlUser, sqlPwd, dbName, connPoolNum);
 
                     // 根据传入的触发模式设置监听和连接的事件模式(LT, ET)
                     _initEventMode(trigMode);

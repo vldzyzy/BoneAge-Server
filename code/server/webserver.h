@@ -42,7 +42,7 @@ public:
      */
     WebServer(
         int port, int trigMode, int timeoutMS, bool optLinger, 
-        int sqlPort, const char* sqlUser, const  char* sqlPwd, 
+        const char* sqlHost, int sqlPort, const char* sqlUser, const  char* sqlPwd, 
         const char* dbName, int connPoolNum, int threadNum,
         bool openLog, int logLevel, int logQueSize);
 
