@@ -303,7 +303,7 @@ void WebServer::_onWrite(HttpConn* client) {
 bool WebServer::_initSocket() {
     int ret;
     struct sockaddr_in addr;
-    if(_port > 65535 || _port < 1024) {
+    if(_port > 65535 || _port < 0) {
         LOG_ERROR("Port:%d error!", _port);
         return false;
     }

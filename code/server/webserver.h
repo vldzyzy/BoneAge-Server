@@ -30,6 +30,7 @@ public:
      * @param trigMode       epoll触发模式（LT/ET组合，0~3对应不同组合）
      * @param timeoutMS      连接超时时间（毫秒）
      * @param optLinger      是否启用优雅关闭（SO_LINGER选项）
+     * @param sqlHost        数据库ip
      * @param sqlPort        数据库端口
      * @param sqlUser        数据库用户名
      * @param sqlPwd         数据库密码
