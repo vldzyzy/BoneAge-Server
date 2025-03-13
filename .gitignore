@@ -1,12 +1,17 @@
 .vscode
-/log/*
 resources
 *.pcap
 *.onnx
 code/util
-build/*
+CMakeFiles
 legacy
 models
+
+
+*.log
+*.cmake
+*.txt
+build/Makefile
 
 # Prerequisites
 *.d
