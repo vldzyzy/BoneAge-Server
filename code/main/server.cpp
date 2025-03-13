@@ -19,21 +19,26 @@ int main() {
     bool openLog = true;          // 开启日志
     int logLevel = 0;             // 日志等级
     int logQueSize = 1024;        // 日志队列大小
+    const char* modelPath = "models"; // onnx模型路径
 
     // 创建 WebServer 实例
     WebServer server(port, trigMode, timeoutMS, optLinger,
                      sqlHost, sqlPort, sqlUser, sqlPwd, dbName, connPoolNum,
-                     threadNum, openLog, logLevel, logQueSize);
+                     threadNum, openLog, logLevel, logQueSize, modelPath);
 
     // 在子线程中启动服务器（start() 会进入事件循环）
     std::thread serverThread([&server]() {
         server.start();
     });
 
+    // 创建推理线程
+    std::thread inferenceThread(inference);
+
     // 等待服务器启动完成
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
     // 等待服务器运行
+    inferenceThread.join();
     serverThread.join();
 
     return 0;

@@ -7,6 +7,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <memory>
+#include <future>
 
 #include "epoller.h"
 #include "../log/log.h"
@@ -14,7 +16,10 @@
 #include "../pool/sqlconnpool.h"
 #include "../pool/threadpool.h"
 #include "../pool/sqlconnRAII.h"
-#include "../http/httpconn.h" 
+#include "../http/httpconn.h"
+#include "../onnx/inference.h"
+#include "../onnx/BoneAgeCls.h"
+#include "../onnx/YOLO.h"
 
 // WebServer类负责实现一个高性能HTTP服务器，主要功能包括：
 // 1. 初始化监听socket并设置相关选项；
@@ -40,12 +45,13 @@ public:
      * @param openLog        是否开启日志
      * @param logLevel       日志等级
      * @param logQueSize     日志队列大小
+     * @param modelPath      onnx模型路径
      */
     WebServer(
         int port, int trigMode, int timeoutMS, bool optLinger, 
         const char* sqlHost, int sqlPort, const char* sqlUser, const  char* sqlPwd, 
         const char* dbName, int connPoolNum, int threadNum,
-        bool openLog, int logLevel, int logQueSize);
+        bool openLog, int logLevel, int logQueSize, const char* modelPath);
 
     // 析构函数，负责释放资源，如关闭socket、释放内存、关闭连接池等
     ~WebServer();
@@ -108,4 +114,6 @@ private:
     std::unique_ptr<Epoller> _epoller;
     // 记录所有活跃的HTTP连接，key为文件描述符
     std::unordered_map<int, HttpConn> _users;
+    // 推理任务队列（图像）
+    
 };

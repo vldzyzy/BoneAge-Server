@@ -5,7 +5,8 @@ using namespace std;
 WebServer::WebServer(int port, int trigMode, int timeoutMS, bool optLinger,
                     const char* sqlHost, int sqlPort, const char* sqlUser,
                     const char* sqlPwd, const char* dbName, int connPoolNum,
-                    int threadNum, bool openLog, int logLevel, int logQueSize)
+                    int threadNum, bool openLog, int logLevel, int logQueSize,
+                    const char* modelPath)
                 : _port(port)
                 , _openLinger(optLinger)
                 , _timeoutMS(timeoutMS)
@@ -17,7 +18,7 @@ WebServer::WebServer(int port, int trigMode, int timeoutMS, bool optLinger,
                     _srcDir = getcwd(nullptr, 256);
                     assert(_srcDir);
                     // 将资源目录附加到当前路径上
-                    strncat(_srcDir, "/new_res/", 16);
+                    strncat(_srcDir, "/res/", 16);
 
                     //初始化HTTP连接类中的静态变量
                     HttpConn::userCount = 0;
@@ -27,6 +28,27 @@ WebServer::WebServer(int port, int trigMode, int timeoutMS, bool optLinger,
 
                     // 初始化sql连接池（单例）
                     SqlConnPool::instance()->init(sqlHost, sqlPort, sqlUser, sqlPwd, dbName, connPoolNum);
+
+                    // 初始化onnxruntime
+                    // 计算新字符串的长度
+                    size_t len1 = std::strlen(modelPath);
+
+                    size_t len2 = len1 + std::strlen("/yolo11m_detect.onnx");
+                    size_t len3 = len1 + std::strlen("/BoneMaturityCls.onnx");
+
+                    // 分配内存
+                    char* yoloPath = new char[len2];
+                    char* clsPath = new char[len3];
+
+                    // 拼接字符串
+                    std::strcpy(yoloPath, modelPath); 
+                    std::strcpy(clsPath, modelPath);
+                                    
+                    std::strcat(yoloPath, "/yolo11m_detect.onnx");          // 添加分隔符
+                    std::strcat(clsPath, "/BoneMaturityCls.onnx");        // 添加第二个路径
+
+                    YOLO_V8::instance()->init(yoloPath);
+                    BoneAgeCls::instance()->init(clsPath);
 
                     // 根据传入的触发模式设置监听和连接的事件模式(LT, ET)
                     _initEventMode(trigMode);
@@ -189,7 +211,7 @@ void WebServer::_addClient(int fd, sockaddr_in addr) {
 
 /**
  * 处理监听socket上的新连接：
- * 使用循环不断accept（在ET模式下需要循环直到所有连接都被接受）
+ * 使用循环不断accept（在ET模式下需要循环直到所有连接都被接受）, 因为用的是非阻塞文件描述符，没有待处理的连接请求，accept会返回-1
  */
 void WebServer::_dealListen() {
     struct sockaddr_in addr;

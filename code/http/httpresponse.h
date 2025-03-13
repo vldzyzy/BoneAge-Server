@@ -7,6 +7,7 @@
 #include <sys/mman.h>   // mmap, munmap
 #include "../buffer/buffer.h" 
 #include "../log/log.h"
+#include "httprequest.h"
 
 /**
  * @class HttpResponse
@@ -36,9 +37,7 @@ public:
     ~HttpResponse();
 
     void init(const std::string& srcDir, std::string& path, bool isKeepAlive = false, int code = -1);
-    void init(const std::string& srcDir, const std::string& path, bool isKeepAlive, int code,
-            std::string uploadedtext,
-            std::string_view uploadedImage);
+    void init(const std::string& srcDir, const std::string& path, bool isKeepAlive, int code, std::string inferenceResult);
     void makeResponse(Buffer& buff);    // 创建HTTP响应
     void unmapFile();
     char* file();
@@ -49,7 +48,7 @@ public:
     bool isAlgorithm() const { return _isAlgorithm; }
 
     // 临时
-    std::string inference(std::string_view image, std::string text);
+    std::string inference(std::string_view image);
 
 private:
     void _addState(Buffer& buff); // 添加状态行
@@ -69,9 +68,10 @@ private:
 
     // 新增成员
     bool _isAlgorithm;     // 如果为 true，则说明响应内容来源于算法推理
-    std::string _algoResult; // 存储模型推理的结果
+    std::string _inferenceResult; // 存储模型推理的结果
 
     static const std::unordered_map<std::string, std::string> SUFFIX_TYPE;  // 后缀类型
     static const std::unordered_map<int, std::string> CODE_STATUS;  // 状态码描述
     static const std::unordered_map<int, std::string> CODE_PATH;    // 错误页面路径
 };
+

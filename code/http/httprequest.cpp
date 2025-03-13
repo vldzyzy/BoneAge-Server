@@ -12,12 +12,12 @@ const std::unordered_map<std::string, int> HttpRequest::DEFAULT_HTML_TAG{ // 特
     {"/register.html", 0}, {"/login.html", 1},}; 
 
 void HttpRequest::init() {
-    _method = _path = _version = _body = "";
+    _method = _path = _version = "";
     _linger = false;
     _contentLen = 0;
     _state = REQUEST_LINE;
+    _post = nullptr;
     _header.clear();
-    _post.clear();
 }
 
 // 传统的控制流程都是按照顺序执行的，状态机能 处理任意顺序的事件，并能提供有意义的响应—即使这些事件发生的顺序和预计的不同。
@@ -38,8 +38,11 @@ HTTP_CODE HttpRequest::parse(Buffer& buff) {
         }
         else {
             // 消息体读取全部内容，同时清空缓存
-            _body += buff.retrieveAllToStr();
-            if (_body.size() < _contentLen) {
+            if(!_post) {
+                _post = std::make_shared<PostData>();
+            }
+            _post->_body += buff.retrieveAllToStr();
+            if (_post->_body.size() < _contentLen) {
                 return NO_REQUEST;
             }
         }
@@ -148,7 +151,7 @@ HTTP_CODE HttpRequest::_parseBody() {
             if (tag == 0 || tag == 1) {
                 bool isLogin = (tag == 1); // 如果是登录页面，isLogin 设置为 true
                 // 验证用户的用户名和密码
-                if (userVerify(_post["username"], _post["password"], isLogin)) {
+                if (userVerify(_post->field["username"].data(), _post->field["password"].data(), isLogin)) {
                     // 验证成功，跳转到欢迎页面
                     _path = "/welcome.html";
                 } else {
@@ -158,7 +161,7 @@ HTTP_CODE HttpRequest::_parseBody() {
             }
         }
     }
-    LOG_DEBUG("Body len:%d",_body.size());
+    LOG_DEBUG("Body len:%d",_post->_body.size());
     return GET_REQUEST;
 }
 
@@ -169,66 +172,66 @@ int HttpRequest::converHex(char ch) {
 }
 
 void HttpRequest::_parseFormUrlencoded() {
-    if(_body.size() == 0) { return; }
+    if(_post->_body.size() == 0) { return; }
 
-    string key, value;
+    string_view key, value;
     int num = 0;
-    int n = _body.size();
+    int n = _post->_body.size();
     int i = 0, j = 0;
 
     for(; i < n; i++) {
-        char ch = _body[i];
+        char ch = _post->_body[i];
         switch (ch) {
         // key
         case '=':
-            key = _body.substr(j, i - j);
+            key = _post->_body.substr(j, i - j);
             j = i + 1;
             break;
         // 键值对中的空格换为+或者%20
         case '+':
-            _body[i] = ' ';
+            _post->_body[i] = ' ';
             break;
         case '%':
-            num = converHex(_body[i + 1]) * 16 + converHex(_body[i + 2]);
-            _body[i + 2] = num % 10 + '0';
-            _body[i + 1] = num / 10 + '0';
+            num = converHex(_post->_body[i + 1]) * 16 + converHex(_post->_body[i + 2]);
+            _post->_body[i + 2] = num % 10 + '0';
+            _post->_body[i + 1] = num / 10 + '0';
             i += 2;
             break;
         // 键值对连接符
         case '&':
-            value = _body.substr(j, i - j);
+            value = _post->_body.substr(j, i - j);
             j = i + 1;
-            _post[key] = value;
-            LOG_DEBUG("%s = %s", key.c_str(), value.c_str());
+            _post->field[key.data()] = value;
+            LOG_DEBUG("%s = %s", key.data(), value.data());
             break;
         default:
             break;
         }
     }
     assert(j <= i);
-    if(_post.count(key) == 0 && j < i) {
-        value = _body.substr(j, i - j);
-        _post[key] = value;
+    if(_post->field.count(key.data()) == 0 && j < i) {
+        value = _post->_body.substr(j, i - j);
+        _post->field[key.data()] = value;
     }
 }
 
 // void HttpRequest::_parseFormData()
 // {
-//     if (_body.size() == 0) return;
+//     if (_post->_body.size() == 0) return;
 
 //     size_t st = 0, ed = 0;
-//     ed = _body.find(CRLF);
-//     string boundary = _body.substr(0, ed);
+//     ed = _post->_body.find(CRLF);
+//     string boundary = _post->_body.substr(0, ed);
 
 //     // 解析文件信息
-//     st = _body.find("filename=\"", ed) + strlen("filename=\"");
-//     ed = _body.find("\"", st);
-//     _fileInfo["filename"] = _body.substr(st, ed - st);
+//     st = _post->_body.find("filename=\"", ed) + strlen("filename=\"");
+//     ed = _post->_body.find("\"", st);
+//     _fileInfo["filename"] = _post->_body.substr(st, ed - st);
     
 //     // 解析文件内容，文件内容以\r\n\r\n开始
-//     st = _body.find("\r\n\r\n", ed) + strlen("\r\n\r\n");
-//     ed = _body.find(boundary, st) - 2; // 文件结尾也有\r\n
-//     string content = _body.substr(st, ed - st);
+//     st = _post->_body.find("\r\n\r\n", ed) + strlen("\r\n\r\n");
+//     ed = _post->_body.find(boundary, st) - 2; // 文件结尾也有\r\n
+//     string content = _post->_body.substr(st, ed - st);
 
 //     ofstream ofs;
 //     // 如果文件分多次发送，应该采用app，同时为避免重复上传，应该用md5做校验
@@ -243,12 +246,12 @@ void HttpRequest::_parseMultipartFormData() {
     size_t lastPos = 0;
 
     // 分割multipart内容并解析每个部分
-    while ((boundaryPos = _body.find(boundary, lastPos)) != std::string::npos) {
+    while ((boundaryPos = _post->_body.find(boundary, lastPos)) != std::string::npos) {
         lastPos = boundaryPos + boundary.length();
-        size_t endPos = _body.find(boundary, lastPos);
+        size_t endPos = _post->_body.find(boundary, lastPos);
         if (endPos == std::string::npos) break;
-        // 使用 string_view 指向 _body 中这一段，避免复制
-        std::string_view part(_body.data() + lastPos, endPos - lastPos);
+        // 使用 string_view 指向 _post->_body 中这一段，避免复制
+        std::string_view part(_post->_body.data() + lastPos, endPos - lastPos);
 
         // 如果是图片部分（通过字段名判断）
         if (part.find("Content-Disposition: form-data; name=\"image\"") != std::string::npos) {
@@ -259,20 +262,19 @@ void HttpRequest::_parseMultipartFormData() {
                     fileStartPos += 4;
                     // 假定结尾有 "\r\n" 两个字节
                     size_t fileDataLen = part.size() - fileStartPos - 2;
-                    // 直接引用 _body 内部对应位置的数据
-                    _uploadImage = std::string_view(_body.data() + lastPos + fileStartPos, fileDataLen);
+                    // 直接引用 _post->_body 内部对应位置的数据
+                    _post->image = std::string_view(_post->_body.data() + lastPos + fileStartPos, fileDataLen);
                     LOG_DEBUG("Uploaded image data size: %zu", fileDataLen);
                 }
             }
         }
         else {
-            // 解析文本数据（如性别）
+            // 解析文本数据
             size_t fieldNamePos = part.find("name=\"") + 6;
             size_t fieldEndPos = part.find("\"", fieldNamePos);
             
             // 使用 std::string_view 提供的 find 和 substr 方法来处理
             std::string_view keyView = part.substr(fieldNamePos, fieldEndPos - fieldNamePos);
-            std::string key(keyView);  // 如果需要 std::string，可以将 std::string_view 转换为 std::string
             
             size_t valueStartPos = part.find("\r\n\r\n") + 4;
             std::string_view valueView = part.substr(valueStartPos);
@@ -283,14 +285,10 @@ void HttpRequest::_parseMultipartFormData() {
             
             // 使用 substr 提取真正的值
             valueView = valueView.substr(start, end - start + 1);
-            
-            // 需要转换为 std::string 时，将 std::string_view 转为 std::string
-            std::string value(valueView);
 
-            _post[key] = value;
-            LOG_DEBUG("Uploaded text: %s = %s", key.c_str(), value.c_str());
+            _post->field[keyView.data()] = valueView;
+            LOG_DEBUG("Uploaded text: %s = %s", keyView.data(), valueView.data());
         }
-
     }
 }
 
@@ -360,9 +358,9 @@ void HttpRequest::saveFile(const std::string& fileData) {
  * @param isLogin 标识当前操作类型，true 表示登录，false 表示注册
  * @return true 表示验证成功（登录成功或注册成功），false 表示验证失败
  */
-bool HttpRequest::userVerify(const string& name, const string& pwd, bool isLogin) {
+bool HttpRequest::userVerify(const char* name, const char* pwd, bool isLogin) {
     if(name == "" || pwd == "") return false;
-    LOG_INFO("Verify name:%s pwd:%s", name.c_str(), pwd.c_str());
+    LOG_INFO("Verify name:%s pwd:%s", name, pwd);
     
     // 利用 RAII 机制从数据库连接池获取一个连接，保证函数退出时自动归还连接
     MYSQL* sql;
@@ -379,7 +377,7 @@ bool HttpRequest::userVerify(const string& name, const string& pwd, bool isLogin
     if(!isLogin) flag = true;
     
     // 构造查询语句：根据用户名查找对应的用户记录
-    snprintf(order, 256, "SELECT username, password FROM user WHERE username='%s' LIMIT 1", name.c_str());
+    snprintf(order, 256, "SELECT username, password FROM user WHERE username='%s' LIMIT 1", name);
     LOG_DEBUG("%s", order);
 
     // 执行查询操作
@@ -419,7 +417,7 @@ bool HttpRequest::userVerify(const string& name, const string& pwd, bool isLogin
     if(!isLogin && flag == true) {
         LOG_DEBUG("register!");
         memset(order, 0, sizeof(order));
-        snprintf(order, 256, "INSERT INTO user(username, password) VALUES('%s', '%s')", name.c_str(), pwd.c_str());
+        snprintf(order, 256, "INSERT INTO user(username, password) VALUES('%s', '%s')", name, pwd);
         LOG_DEBUG("%s", order);
         if(mysql_query(sql, order)) {
             LOG_DEBUG("Insert error!");
@@ -449,21 +447,17 @@ std::string HttpRequest::version() const {
     return _version;
 }
 
-std::string HttpRequest::getPost(const std::string& key) const {
-    assert(key != "");
-    if(_post.count(key) == 1) {
-        return _post.find(key)->second;
-    }
-    return "";
+std::shared_ptr<PostData> HttpRequest::getPostPtr() const {
+    return _post;
 }
 
-std::string HttpRequest::getPost(const char* key) const {
-    assert(key != nullptr);
-    if(_post.count(key) == 1) {
-        return _post.find(key)->second;
-    }
-    return "";
-}
+// std::string HttpRequest::getPost(const char* key) const {
+//     assert(key != nullptr);
+//     if(_post.count(key) == 1) {
+//         return _post.find(key)->second;
+//     }
+//     return "";
+// }
 
 bool HttpRequest:: isKeepAlive() const {
     if (_header.count("Connection")) return _linger;

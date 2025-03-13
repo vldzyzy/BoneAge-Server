@@ -10,6 +10,7 @@
 #include "../log/log.h"
 #include "../pool/sqlconnpool.h"
 #include "../pool/sqlconnRAII.h"
+#include "../types/types.h"
 
 enum HTTP_CODE {
     NO_REQUEST,  // http请求 解析还没完成，继续解析
@@ -46,11 +47,10 @@ public:
     std::string version() const;    // 获取版本
 
     // 获取Post数据
-    std::string getPost(const std::string& key) const;
-    std::string getPost(const char* key) const;
+    std::shared_ptr<PostData> getPostPtr() const;
 
     // 新增接口：获取用户上传的图片数据（对 _body 内部数据的引用，不经过复制）
-    std::string_view getUploadImage() const { return _uploadImage; }
+    // std::string_view getUploadImage() const { return _uploadImage; }
 
     // 判断是否保持连接
     bool isKeepAlive() const;
@@ -68,19 +68,15 @@ private:
 
     void saveFile(const std::string& fileData); // 保存文件
 
-    static bool userVerify(const std::string& name, const std::string& pwd, bool isLogin); // 用户验证
+    static bool userVerify(const char* name, const char* pwd, bool isLogin); // 用户验证
     PARSE_STATE _state; // 当前解析状态
-    std::string _method, _path, _version, _body;    // 请求信息
+    std::string _method, _path, _version;    // 请求信息
+    std::shared_ptr<PostData> _post;
 
     bool _linger;           // 
     size_t _contentLen;     // 
 
     std::unordered_map<std::string, std::string> _header;   // 首部字段
-    std::unordered_map<std::string, std::string> _post;     // 客户 上传的 文字 数据
-    std::unordered_map<std::string, std::string> _fileInfo; // 客户 上传的 文件
-
-    // 新增：存储上传的图片数据（引用 _body 中的内容，避免额外复制）
-    std::string_view _uploadImage;
 
     // 常量
     static const std::unordered_set<std::string> DEFAULT_HTML;  // 默认HTML路径

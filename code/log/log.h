@@ -12,7 +12,7 @@
 #include <filesystem>
 #include <chrono>        
 #include "../buffer/buffer.h"
-#include "blockqueue.h"
+#include "../queue/blockqueue.h"
 
 // TODO: Modern C++
 class Log {

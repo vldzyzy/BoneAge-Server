@@ -19,9 +19,14 @@ public:
     bool empty();
     bool full();
     void push_back(const T& item);
+    void push_back(T&& item);
     void push_front(const T& item);
+    void push_front(T&& item);
     bool pop(T& item);
     bool pop(T& item, int timeout);
+    bool pop_move(T& item);
+    bool pop_move(T& item, int timeout);
+
     void clear();
     T front();
     T back();
@@ -87,6 +92,15 @@ void BlockQueue<T>::push_back(const T& item) {
 }
 
 template<typename T>
+void BlockQueue<T>::push_back(T&& item) {
+    unique_lock<mutex> lock(_mutex);
+    _notFull.wait(lock, [this]() { return _deque.size() < _capacity || _isClosed ;});
+    if(_isClosed) return;
+    _deque.push_back(std::move(item));
+    _notEmpty.notify_one();
+}
+
+template<typename T>
 void BlockQueue<T>::push_front(const T& item) {
     unique_lock<mutex> lock(_mutex);
     _notFull.wait(lock, [this]() { return _deque.size() < _capacity || _isClosed ;});
@@ -94,6 +108,16 @@ void BlockQueue<T>::push_front(const T& item) {
     _deque.push_front(item);
     _notEmpty.notify_one();
 }
+
+template<typename T>
+void BlockQueue<T>::push_front(T&& item) {
+    unique_lock<mutex> lock(_mutex);
+    _notFull.wait(lock, [this]() { return _deque.size() < _capacity || _isClosed ;});
+    if(_isClosed) return;
+    _deque.push_front(std::move(item));
+    _notEmpty.notify_one();
+}
+
 
 template<typename T>
 bool BlockQueue<T>::pop(T& item) {
@@ -122,6 +146,38 @@ bool BlockQueue<T>::pop(T& item, int timeout) {
         return false;
     }
     item = _deque.front();
+    _deque.pop_front();
+    _notFull.notify_one();
+    return true;
+}
+
+template<typename T>
+bool BlockQueue<T>::pop_move(T& item) {
+    unique_lock<mutex> lock(_mutex);
+    _notEmpty.wait(lock, [this]() { return !_deque.empty() || _isClosed;});
+    if(_isClosed) return false;
+    item = std::move(_deque.front());
+    _deque.pop_front();
+    _notFull.notify_one();
+    return true;
+}
+/**
+ * @brief 从队列头部弹出元素，带有超时机制
+ * @tparam T 队列中存储的元素类型
+ * @param item 弹出的元素将存储在该参数中
+ * @param timeout 超时时间（秒）
+ * @return true 弹出成功
+ * @return false 弹出失败（队列为空或超时）
+ */
+template<typename T>
+bool BlockQueue<T>::pop_move(T& item, int timeout) {
+    unique_lock<mutex> lock(_mutex);
+    // 超时时返回最新的pred()
+    if(!_notEmpty.wait_for(lock, chrono::seconds(timeout), 
+                        [this]() { return !_deque.empty() || _isClosed;})){
+        return false;
+    }
+    item = std::move(_deque.front());
     _deque.pop_front();
     _notFull.notify_one();
     return true;

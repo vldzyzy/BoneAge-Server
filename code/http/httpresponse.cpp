@@ -1,6 +1,5 @@
 #include "httpresponse.h"
 
-
 // MIME类型推断规则：
 // 1. 优先识别扩展名（支持10+种常见类型）
 // 2. 无扩展名或未知类型默认text/plain
@@ -60,9 +59,7 @@ void HttpResponse::init(const std::string& srcDir, std::string& path, bool isKee
 }
 
 // 新增：针对算法推理请求的初始化接口（不进行文件映射）
-void HttpResponse::init(const std::string& srcDir, const std::string& path, bool isKeepAlive, int code,
-            std::string uploadedText,
-            std::string_view uploadedImage) {
+void HttpResponse::init(const std::string& srcDir, const std::string& path, bool isKeepAlive, int code, std::string inferenceResult) {
     assert(srcDir != "");
     if(_mmFile) unmapFile();
     _code = code;
@@ -73,8 +70,7 @@ void HttpResponse::init(const std::string& srcDir, const std::string& path, bool
     _mmFileStat = { 0 };
     _isAlgorithm = true;
     // 调用模型推理接口，注意这里传入的 image 为 string_view，不经过额外复制
-    _algoResult = inference(uploadedImage, uploadedText);
-    LOG_DEBUG("Algorithm inference result: %s", _algoResult.c_str());
+    _inferenceResult = inferenceResult;
 }
 
 
@@ -107,8 +103,8 @@ void HttpResponse::makeResponse(Buffer& buff) {
             _addState(buff);
             _addHeader(buff);
             buff.append("Content-type: application/json\r\n");
-            buff.append("Content-length: " + std::to_string(_algoResult.size()) + "\r\n\r\n");
-            buff.append(_algoResult);
+            buff.append("Content-length: " + std::to_string(_inferenceResult.size()) + "\r\n\r\n");
+            buff.append(_inferenceResult);
     }
     else {
         // 静态资源处理（原有逻辑）
@@ -276,22 +272,97 @@ void HttpResponse::_errorHtml() {
     }
 }
 
-// 临时
-// 模型推理接口：注意传入的 image 为 string_view，不经过复制
-std::string HttpResponse::inference(std::string_view image, std::string text) {
-    // 计算文件大小（字节）
-    size_t fileSizeInBytes = image.length();
+// // 类别映射
+// std::unordered_map<std::string, std::string> categoryMap {
+//     {"DIP1", "DIPFirst"},
+//     {"DIP2", "DIP"},
+//     {"DIP3", "DIP"},
+//     {"DIP4", "DIP"},
+//     {"DIP5", "DIP"},
+//     {"MIP1", "MIP"},
+//     {"MIP2", "MIP"},
+//     {"MIP3", "MIP"},
+//     {"MIP4", "MIP"},
+//     {"MIP5", "MIP"},
+//     {"PIP1", "PIPFirst"},
+//     {"PIP2", "PIP"},
+//     {"PIP3", "PIP"},
+//     {"PIP4", "PIP"},
+//     {"PIP5", "PIP"},
+//     {"FMCP", "MCPFirst"},
+//     {"MCP1", "MCP"},
+//     {"MCP2", "MCP"},
+//     {"MCP3", "MCP"},
+//     {"MCP4", "MCP"},
+//     {"MCP5", "MCP"}
+// };
 
-    // 转换为 KB（1 KB = 1024 字节）
-    double fileSizeInKB = static_cast<double>(fileSizeInBytes) / 1024.0;
+// void generate_image_regions(
+//     std::string_view img_data, // 原始图像
+//     const std::unordered_map<std::string, cv::Rect>& selected_boxes,
+//     std::vector<cv::Mat>& images,
+//     std::vector<std::string>& categories
+// ) {
+//     // ============== 1. 图像解码 ==============
+//     const uchar* p_data = reinterpret_cast<const uchar*>(img_data.data());
+//     int data_length = static_cast<int>(img_data.size());
+//     cv::Mat encoded_img(1, data_length, CV_8UC1, (void*)p_data);
+//     cv::Mat original_image = cv::imdecode(encoded_img, cv::IMREAD_COLOR);
 
-    std::string error_ = "false";
+//     // 清空输出容器
+//     images.clear();
+//     categories.clear();
+
+//     // 遍历所有检测框
+//     for (const auto& [category, rect] : selected_boxes) {
+//         // 检查矩形是否在图像范围内
+//         if (rect.x >= 0 && rect.y >= 0 &&
+//             rect.x + rect.width <= original_image.cols &&
+//             rect.y + rect.height <= original_image.rows) 
+//         {
+//             // 提取图像区域（深拷贝）
+//             cv::Mat roi = original_image(rect).clone();
+//             images.push_back(roi);
+
+//             // 类别转换
+//             auto it = categoryMap.find(category);
+//             if(it != categoryMap.end()) {
+//                 categories.push_back(it->second);
+//             }
+//             else{
+//                 categories.push_back(category);
+//             }
+//         } else {
+//             // 可选的错误处理逻辑
+//             std::cerr << "Invalid rectangle: " << rect << " for category " << category << std::endl;
+//         }
+//     }
+// }
 
 
-    // 构造 JSON 格式的字符串，包含 "image" 和 "输入的文本" 两个字段
-    std::string jsonResult = "{\"image\": " + std::to_string(fileSizeInKB) +
-                             ", \"输入的文本\": \"" + text + "\"" +
-                             ", \"error\": false}";
+// // 临时
+// // 模型推理接口：注意传入的 image 为 string_view，不经过复制
+// std::string HttpResponse::inference(std::string_view image) {
+//     neb::CJsonObject detectJson;
+//     std::unordered_map<std::string, cv::Rect> selected_boxes;
+//     bool ret = YOLO_V8::instance()->detect(image, selected_boxes);
+//     detectJson = YOLO_V8::convertToJson(selected_boxes);
+//     if(ret) {
+//         std::vector<cv::Mat> images;
+//         std::vector<std::string> categories;
+//         generate_image_regions(image, selected_boxes, images, categories);
+//         if(BoneAgeCls::instance()->predict(images, categories)){
+//             neb::CJsonObject clsJson = BoneAgeCls::instance()->convertToJson();
+//             neb::CJsonObject jsonResult;
+//             jsonResult.Add("detect_result", detectJson);
+//             jsonResult.Add("predict_result", clsJson);
+//             return jsonResult.ToString();
+//         }
+//         else {
+//             LOG_ERROR("cls error!");
+//         }
+//     }
+    
+//     return detectJson.ToString();
+// }
 
-    return jsonResult;
-}

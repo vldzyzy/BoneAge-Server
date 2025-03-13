@@ -4,12 +4,16 @@
 #include <arpa/inet.h>      // sockaddr_in, inet_ntoa()
 #include <cstdlib>          // atoi()
 #include <cerrno>           // errno
+#include <cassert>
+#include <unistd.h>     // close()
+#include <cstring>      // memset()
 
 #include "../log/log.h"
 #include "../buffer/buffer.h"
 #include "httprequest.h"
 #include "httpresponse.h"
-
+#include "../onnx/inference.h"
+#
 /**
  * HTTP连接处理类（基于Reactor模式）
  * 

@@ -1,7 +1,5 @@
 #include "httpconn.h"
-#include <cassert>
-#include <unistd.h>     // close()
-#include <cstring>      // memset()
+
 
 // 初始化静态变量
 const char* HttpConn::srcDir = nullptr;
@@ -144,15 +142,20 @@ bool HttpConn::process() {
     else if(ret == GET_REQUEST) {
         LOG_DEBUG("%s", _request.path().c_str());
         // 判断是否为算法推理请求：例如 POST 方法且请求路径为 "/predict"
-        if(_request.method() == "POST" && _request.path() == "/predict") {
-            // 使用带上传数据参数的 init 接口，将 _uploadImage 与 _uploadText 直接传入，不经过复制
-            _response.init(srcDir, _request.path(), _request.isKeepAlive(), 200,
-                           _request.getPost("gender"),
-                           _request.getUploadImage());
+        if(_request.method() == "POST" && _request.path() == "/detect") {
+            // 创建推理任务，提交到推理任务队列
+            inferenceTask task(_sockfd, _request.getPostPtr());
+            std::future<std::string> result_future = task.resultPromise.get_future();
+            inferenceQueue.push_back(std::move(task));
+
+            std::string inferenceResult = result_future.get();
+
+            // 使用带模型推理的 init 接口
+            _response.init(srcDir, _request.path(), _request.isKeepAlive(), 200, inferenceResult);
         }
         else {  // 静态资源
             // 如果解析成功，根据请求生成响应，状态码设为 200
-            _response.init(srcDir, _request.path(), _request.isKeepAlive(), 200);
+            _response.init(srcDir, _request.path(), _request.isKeepAlive(), 200); 
         }
         _request.init(); // 如果是长连接，等待下一次请求，需要初始化
     } 

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>骨龄检测系统</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>中华05(RUS-CHN)骨龄检测系统</h1>
+        
+        <div class="gender-selection">
+            <label>性别选择:</label>
+            <select id="genderSelect">
+                <option value="boy">男</option>
+                <option value="girl">女</option>
+            </select>
+        </div>
+        
+        <div class="upload-section" id="dropZone">
+            <input type="file" id="imageInput" accept="image/*" style="display: none;">
+            <button class="button" id="selectButton">选择图片</button>
+            <button class="button" id="uploadButton" disabled>上传并检测</button>
+            <div id="spinner" class="spinner hidden"></div>
+            <p>或将图片拖放到此区域</p>
+            <p class="file-limit">文件大小限制: 20MB</p>
+        </div>
+        
+        <div id="messageArea"></div>
+        
+        <div class="tool-section">
+            <h3>操作工具</h3>
+            <div class="controls">
+                <button class="button secondary" id="drawButton" disabled>绘制目标框</button>
+                <button class="button warning" id="deleteButton" disabled>删除选中框</button>
+                <button class="button warning" id="clearUserBoxes" disabled>清除用户框</button>
+                <button class="button warning" id="clearServerBoxes" disabled>清除服务器框</button>
+                <button class="button warning" id="clearAllBoxes" disabled>清除所有框</button>
+                <button class="button" id="submitBoxes" disabled>提交标注</button>
+            </div>
+        </div>
+        
+        <div class="canvas-container">
+            <canvas id="imageCanvas"></canvas>
+            <div class="tooltip" id="tooltip"></div>
+        </div>
+        
+        <div class="bone-age-result hidden" id="boneAgeResult">
+            <h2>骨龄评估结果: <span id="boneAgeValue">--</span> 岁</h2>
+        </div>
+        
+        <div class="status-bar hidden" id="statusBar">
+            <div class="file-info" id="fileInfo"></div>
+        </div>
+        
+        <div class="legend hidden" id="legendSection">
+            <div class="legend-title">
+                <h3>目标框图例</h3>
+                <span id="boxCount"></span>
+            </div>
+            <div class="legend-content" id="legend">
+                <div class="legend-item">
+                    <div class="color-sample server-box"></div>
+                    <span>服务器检测框 (<span id="serverBoxCount">0</span>)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-sample user-box"></div>
+                    <span>用户绘制框 (<span id="userBoxCount">0</span>)</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="box-info hidden" id="boxInfo">
+            <h3>框信息</h3>
+            <div class="box-property">
+                <span class="property-label">标签:</span>
+                <span id="boxLabel"></span>
+            </div>
+            <div class="box-property">
+                <span class="property-label">位置:</span>
+                <span id="boxCoords"></span>
+            </div>
+            <div class="box-property">
+                <span class="property-label">尺寸:</span>
+                <span id="boxSize"></span>
+            </div>
+            <div class="box-property">
+                <span class="property-label">来源:</span>
+                <span id="boxSource"></span>
+            </div>
+        </div>
+        
+        <!-- 新增结果容器 -->
+        <div class="results-container hidden" id="resultsContainer">
+            <!-- 参考曲线 -->
+            <div class="reference-curve">
+                <h3>骨龄-成熟度对应曲线</h3>
+                <img src="rus-chn-curve.png" alt="骨龄-成熟度得分对应曲线" id="referenceCurve">
+            </div>
+            
+            <!-- 关节详情 -->
+            <div class="joints-details">
+                <h3>关节成熟度详情</h3>
+                <div class="joints-grid" id="jointsGrid"></div>
+                <div class="total-score">
+                    <h3>总得分: <span id="totalScoreValue">--</span></h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="scripts.js"></script>
+</body>
+</html>
