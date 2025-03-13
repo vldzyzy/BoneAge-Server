@@ -1,10 +1,10 @@
 .vscode
-/log/
+/log/*
 resources
 *.pcap
 *.onnx
 code/util
-build/
+build/*
 legacy
 models
 
