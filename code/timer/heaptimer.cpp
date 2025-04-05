@@ -121,8 +121,8 @@ void HeapTimer::tick() {
         if(std::chrono::duration_cast<MS>(node.expires - Clock::now()).count() > 0) {
             break;
         }
-        node.cb();
         pop();
+        node.cb();
     } 
 }
 

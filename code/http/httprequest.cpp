@@ -87,7 +87,7 @@ HTTP_CODE HttpRequest::parse(Buffer& buff) {
 
 void HttpRequest::_parsePath() {
     if(_path == "/") {
-        _path = "/index.html";
+        _path = "/login.html";
     }
     else if(DEFAULT_HTML.count(_path)){
         _path += ".html";
@@ -140,27 +140,8 @@ HTTP_CODE HttpRequest::_parseBody() {
     else if (_method == "POST" && _header["Content-Type"] == "application/x-www-form-urlencoded") {
         // 解析 POST 请求体中的表单数据（URL 编码格式）
         _parseFormUrlencoded();
-
-        // 检查当前请求路径是否是 特定 HTML 页面路径之一
-        if (DEFAULT_HTML_TAG.count(_path)) {
-            // 获取对应的标签（用于注册或登录页面） 
-            int tag = DEFAULT_HTML_TAG.find(_path)->second;
-            LOG_DEBUG("Tag:%d", tag);
-
-            // 根据 tag 判断是否为登录页面（tag == 1 表示登录）
-            if (tag == 0 || tag == 1) {
-                bool isLogin = (tag == 1); // 如果是登录页面，isLogin 设置为 true
-                // 验证用户的用户名和密码
-                if (userVerify(_post->field["username"].data(), _post->field["password"].data(), isLogin)) {
-                    // 验证成功，跳转到欢迎页面
-                    _path = "/welcome.html";
-                } else {
-                    // 验证失败，跳转到错误页面
-                    _path = "/error.html";
-                }
-            }
-        }
     }
+
     LOG_DEBUG("Body len:%d",_post->_body.size());
     return GET_REQUEST;
 }
@@ -171,47 +152,98 @@ int HttpRequest::converHex(char ch) {
     return ch;
 }
 
+// void HttpRequest::_parseFormUrlencoded() {
+//     if(_post->_body.size() == 0) { return; }
+
+//     string_view key, value;
+//     int num = 0;
+//     int n = _post->_body.size();
+//     int i = 0, j = 0;
+
+//     for(; i < n; i++) {
+//         char ch = _post->_body[i];
+//         switch (ch) {
+//         // key
+//         case '=':
+//             key = _post->_body.substr(j, i - j);
+//             j = i + 1;
+//             break;
+//         // 键值对中的空格换为+或者%20
+//         case '+':
+//             _post->_body[i] = ' ';
+//             break;
+//         case '%':
+//             num = converHex(_post->_body[i + 1]) * 16 + converHex(_post->_body[i + 2]);
+//             _post->_body[i + 2] = num % 10 + '0';
+//             _post->_body[i + 1] = num / 10 + '0';
+//             i += 2;
+//             break;
+//         // 键值对连接符
+//         case '&':
+//             value = _post->_body.substr(j, i - j);
+//             j = i + 1;
+//             _post->field[key.data()] = value;
+//             LOG_DEBUG("%s = %s", key.data(), value.data());
+//             break;
+//         default:
+//             break;
+//         }
+//     }
+//     assert(j <= i);
+//     if(_post->field.count(key.data()) == 0 && j < i) {
+//         value = _post->_body.substr(j, i - j);
+//         _post->field[key.data()] = value;
+//     }
+// }
+
 void HttpRequest::_parseFormUrlencoded() {
-    if(_post->_body.size() == 0) { return; }
+    if (_post->_body.empty()) return;
 
-    string_view key, value;
-    int num = 0;
-    int n = _post->_body.size();
-    int i = 0, j = 0;
+    std::string decoded_str;
+    decoded_str.reserve(_post->_body.size());
 
-    for(; i < n; i++) {
+    // 第一步：解码到临时字符串
+    for (size_t i = 0; i < _post->_body.size(); ++i) {
         char ch = _post->_body[i];
-        switch (ch) {
-        // key
-        case '=':
-            key = _post->_body.substr(j, i - j);
-            j = i + 1;
-            break;
-        // 键值对中的空格换为+或者%20
-        case '+':
-            _post->_body[i] = ' ';
-            break;
-        case '%':
-            num = converHex(_post->_body[i + 1]) * 16 + converHex(_post->_body[i + 2]);
-            _post->_body[i + 2] = num % 10 + '0';
-            _post->_body[i + 1] = num / 10 + '0';
-            i += 2;
-            break;
-        // 键值对连接符
-        case '&':
-            value = _post->_body.substr(j, i - j);
-            j = i + 1;
-            _post->field[key.data()] = value;
-            LOG_DEBUG("%s = %s", key.data(), value.data());
-            break;
-        default:
-            break;
+        if (ch == '+') {
+            decoded_str += ' ';
+        } else if (ch == '%') {
+            if (i + 2 >= _post->_body.size()) {
+                // 错误处理：编码不完整
+                return;
+            }
+            int hex1 = converHex(_post->_body[i+1]);
+            int hex2 = converHex(_post->_body[i+2]);
+            if (hex1 == -1 || hex2 == -1) {
+                // 错误处理：非法十六进制字符
+                return;
+            }
+            decoded_str += static_cast<char>((hex1 << 4) | hex2);
+            i += 2; // 跳过已处理的两位
+        } else {
+            decoded_str += ch;
         }
     }
-    assert(j <= i);
-    if(_post->field.count(key.data()) == 0 && j < i) {
-        value = _post->_body.substr(j, i - j);
-        _post->field[key.data()] = value;
+
+    // 第二步：解析键值对
+    size_t start = 0;
+    while (start < decoded_str.size()) {
+        size_t eq_pos = decoded_str.find('=', start);
+        if (eq_pos == std::string::npos) break;
+
+        std::string_view key(decoded_str.data() + start, eq_pos - start);
+
+        size_t amp_pos = decoded_str.find('&', eq_pos + 1);
+        std::string_view value;
+        if (amp_pos == std::string::npos) {
+            value = std::string_view(decoded_str.data() + eq_pos + 1, decoded_str.size() - eq_pos - 1);
+            start = decoded_str.size();
+        } else {
+            value = std::string_view(decoded_str.data() + eq_pos + 1, amp_pos - eq_pos - 1);
+            start = amp_pos + 1;
+        }
+
+        _post->field[std::string(key)] = std::string(value);
     }
 }
 
@@ -358,79 +390,6 @@ void HttpRequest::saveFile(const std::string& fileData) {
  * @param isLogin 标识当前操作类型，true 表示登录，false 表示注册
  * @return true 表示验证成功（登录成功或注册成功），false 表示验证失败
  */
-bool HttpRequest::userVerify(const char* name, const char* pwd, bool isLogin) {
-    if(name == "" || pwd == "") return false;
-    LOG_INFO("Verify name:%s pwd:%s", name, pwd);
-    
-    // 利用 RAII 机制从数据库连接池获取一个连接，保证函数退出时自动归还连接
-    MYSQL* sql;
-    SqlConnRAII(&sql, SqlConnPool::instance());
-    assert(sql);
-
-    bool flag = false; // 标记用户验证是否成功
-    unsigned int j = 0;
-    char order[256] = {0};
-    MYSQL_FIELD *fields = nullptr;
-    MYSQL_RES *res = nullptr;
-
-    // 注册时，默认认为可以注册（flag 为 true），但如果查询到用户存在则置为 false
-    if(!isLogin) flag = true;
-    
-    // 构造查询语句：根据用户名查找对应的用户记录
-    snprintf(order, 256, "SELECT username, password FROM user WHERE username='%s' LIMIT 1", name);
-    LOG_DEBUG("%s", order);
-
-    // 执行查询操作
-    if(mysql_query(sql, order)) {
-        // 查询失败时，释放结果集并返回 false
-        mysql_free_result(res);
-        return false;
-    }
-    
-    // 获取查询结果集
-    res = mysql_store_result(sql);
-    j = mysql_num_fields(res);
-    fields = mysql_fetch_fields(res);
-
-    // 遍历结果集（通常最多只有一条记录，因为使用了 LIMIT 1）
-    while(MYSQL_ROW row = mysql_fetch_row(res)) {
-        LOG_DEBUG("MYSQL ROW: %s %s", row[0], row[1]);
-        string password(row[1]);
-        if(isLogin) { // 登录模式下，比较密码是否匹配
-            if(pwd == password)
-                flag = true;
-            else {
-                flag = false;
-                LOG_INFO("pwd error!");
-            }
-        }
-        else { // 注册模式下，如果查询到记录，说明用户名已存在，不允许注册
-            flag = false;
-            LOG_INFO("user used!");
-        }
-    }
-    
-    // 释放查询结果资源，防止内存泄漏
-    mysql_free_result(res);
-
-    // 如果是注册模式且用户名未被使用，则进行用户注册（插入新用户记录）
-    if(!isLogin && flag == true) {
-        LOG_DEBUG("register!");
-        memset(order, 0, sizeof(order));
-        snprintf(order, 256, "INSERT INTO user(username, password) VALUES('%s', '%s')", name, pwd);
-        LOG_DEBUG("%s", order);
-        if(mysql_query(sql, order)) {
-            LOG_DEBUG("Insert error!");
-            flag = false;
-        }
-        // 注意：此处无论插入成功与否，flag 最终都会被置为 true，
-        // 这可能需要进一步调整以确保插入失败时返回 false。
-        flag = true;
-    }
-    
-    LOG_DEBUG("userVerify success!");
-    return flag;
-}
 
 std::string HttpRequest::path() const{
     return _path;

@@ -96,6 +96,9 @@ private:
     // 将文件描述符设置为非阻塞模式
     static int setFdNonblock(int fd);
 
+    // 防止mysql连接池超时
+    void pingSqlCallback();
+
     int _port;            // 服务器监听端口
     bool _openLinger;     // 是否启用优雅关闭（SO_LINGER选项）
     int _timeoutMS;       // 客户端连接超时时间（毫秒）

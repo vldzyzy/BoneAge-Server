@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)  # 提升CMake版本要求
-project(inferenc_server.out VERSION 0.0.1 LANGUAGES C CXX CUDA)  # 直接添加 CUDA 支持
+project(BoneAge_Server.out VERSION 0.0.1 LANGUAGES C CXX CUDA)  # 直接添加 CUDA 支持
 
 # 禁用优化并启用调试
 add_compile_options(-g -O0)

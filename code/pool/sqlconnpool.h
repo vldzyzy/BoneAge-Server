@@ -6,6 +6,8 @@
 #include <semaphore.h>
 #include <thread>
 #include "../log/log.h"
+#include <chrono>
+#include <unordered_map>
 
 class SqlConnPool {
 public:
@@ -20,6 +22,8 @@ public:
         const char* dbName, int connSize);
     void closePool();
 
+    void pingIdleConnections();     // 定时刷新空闲连接，避免超时
+
 private:
     SqlConnPool();
     ~SqlConnPool();
@@ -31,4 +35,7 @@ private:
     std::queue<MYSQL*> _connQue;
     std::mutex _mtx;
     sem_t _semId;
+
+    std::unordered_map<MYSQL*, std::chrono::steady_clock::time_point> _lastIdleTime;    // 存储连接最后一次变为空闲的时间戳
+    static constexpr std::chrono::seconds MIN_IDLE_BEFORE_PING = std::chrono::hours(4);
 };

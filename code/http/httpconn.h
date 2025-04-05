@@ -102,6 +102,8 @@ public:
     static const char* srcDir;  // 静态资源目录(网站根目录)
     static std::atomic<int> userCount;  // 当前用户连接数量
 
+    static bool userVerify(const char* name, const char* pwd, bool isLogin); // 用户验证
+
 private:
     int _sockfd; 
     struct sockaddr_in _addr;   // 客户端地址信息

@@ -7,7 +7,7 @@ int main() {
     // 配置服务器参数
     int port = 80;              // 监听端口
     int trigMode = 3;             // 触发模式：监听和连接均使用 ET 模式
-    int timeoutMS = 60000;         // 连接超时 60 s
+    int timeoutMS = 600000;         // 连接超时 60 s
     bool optLinger = false;       // 不启用 SO_LINGER 优雅关闭
     const char* sqlHost = "172.17.0.1";  // 数据库host
     int sqlPort = 3306;           // 数据库端口（根据实际情况设置）
@@ -20,6 +20,11 @@ int main() {
     int logLevel = 0;             // 日志等级
     int logQueSize = 1024;        // 日志队列大小
     const char* modelPath = "models"; // onnx模型路径
+
+    if (mysql_library_init(0, nullptr, nullptr)) {
+        std::cerr << "Could not initialize MySQL library" << std::endl;
+        return 1;
+    }
 
     // 创建 WebServer 实例
     WebServer server(port, trigMode, timeoutMS, optLinger,

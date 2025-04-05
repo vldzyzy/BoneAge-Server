@@ -11,7 +11,8 @@
 class ThreadPool {
 public:
     explicit ThreadPool(size_t threadCount = 8)
-    : _pool(std::make_shared<Pool>()) {
+    : _pool(std::make_shared<Pool>()) 
+    {
         assert(threadCount > 0);
         for(size_t i = 0; i < threadCount; ++i) {
             std::thread([pool = _pool]() {
@@ -63,11 +64,11 @@ public:
 
 private:
     // 声明给创建的线程传递的参数的结构体
-    // 也就是线程间的共享资源：锁、条件变量、运行状态、任务队列
+    // 也就是线程间的共享资源：任务队列，及其附带的用于并发的一些结构
     struct Pool {
-        std::mutex mtx;     // 线程的锁
-        std::condition_variable cond;   // 线程的条件变量
-        bool isClosed;  // 线程的运行状态
+        std::mutex mtx;     // 任务队列的锁
+        std::condition_variable cond;  // 任务队列的条件变量
+        bool isClosed;  // 任务队列是否关闭
         std::queue<std::function<void()>> tasks;    // 任务队列
     };
     // 线程参数结构体创建后用智能指针管理

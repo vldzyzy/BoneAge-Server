@@ -11,8 +11,8 @@ WebServer::WebServer(int port, int trigMode, int timeoutMS, bool optLinger,
                 , _openLinger(optLinger)
                 , _timeoutMS(timeoutMS)
                 , _isClose(false)
-                , _timer(new HeapTimer())
-                , _threadpool(new ThreadPool(threadNum))
+                , _timer(make_unique<HeapTimer>())
+                , _threadpool(make_unique<ThreadPool>(threadNum))
                 , _epoller(new Epoller())
                 {
                     _srcDir = getcwd(nullptr, 256);
@@ -25,9 +25,10 @@ WebServer::WebServer(int port, int trigMode, int timeoutMS, bool optLinger,
                     HttpConn::srcDir = _srcDir;
 
                     if(openLog) Log::instance()->init(logLevel, "./log", ".log", logQueSize);
-
                     // 初始化sql连接池（单例）
                     SqlConnPool::instance()->init(sqlHost, sqlPort, sqlUser, sqlPwd, dbName, connPoolNum);
+
+                    _timer->add(33060, 1000*60*60*2, std::bind(&WebServer::pingSqlCallback, this));
 
                     // 初始化onnxruntime
                     // 计算新字符串的长度
@@ -131,7 +132,7 @@ void WebServer::start() {
         LOG_INFO("========== Server Start ===========");
     }
     // 主事件循环：直到服务器被关闭
-    while(!_isClose) {
+    while(!_isClose) {       
         // 如果设置了超时，获取定时器中最近到期的时间
         if(_timeoutMS > 0) timeMS = _timer->getNextTick();
 
@@ -160,7 +161,7 @@ void WebServer::start() {
                 assert(_users.count(fd) > 0);
                 _dealWrite(&_users[fd]);
             }
-            else{
+            else {
                 LOG_ERROR("Unexpected event");
             }
         }
@@ -272,7 +273,7 @@ void WebServer::_onRead(HttpConn* client) {
         _closeConn(client);
         return;
     }
-    onProcess(client);      // 处理数据
+    onProcess(client);   // 处理数据
 }
 
 /**
@@ -392,4 +393,9 @@ bool WebServer::_initSocket() {
 int WebServer::setFdNonblock(int fd) {
     assert(fd > 0);
     return fcntl(fd, F_SETFL, fcntl(fd, F_GETFD, 0) | O_NONBLOCK);
+}
+
+void WebServer::pingSqlCallback() {
+    SqlConnPool::instance()->pingIdleConnections();
+    _timer->add(33060, 1000*60*60*2, std::bind(&WebServer::pingSqlCallback, this));
 }

@@ -54,6 +54,7 @@ public:
 
     // 判断是否保持连接
     bool isKeepAlive() const;
+    
 
 private:
     HTTP_CODE _parseRequestLine(const std::string& line);    // 请求行解析
@@ -68,7 +69,6 @@ private:
 
     void saveFile(const std::string& fileData); // 保存文件
 
-    static bool userVerify(const char* name, const char* pwd, bool isLogin); // 用户验证
     PARSE_STATE _state; // 当前解析状态
     std::string _method, _path, _version;    // 请求信息
     std::shared_ptr<PostData> _post;

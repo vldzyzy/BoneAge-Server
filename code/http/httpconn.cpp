@@ -1,5 +1,5 @@
 #include "httpconn.h"
-
+#include "../json/CJsonObject.hpp"
 
 // 初始化静态变量
 const char* HttpConn::srcDir = nullptr;
@@ -142,17 +142,32 @@ bool HttpConn::process() {
     else if(ret == GET_REQUEST) {
         LOG_DEBUG("%s", _request.path().c_str());
         // 判断是否为算法推理请求：例如 POST 方法且请求路径为 "/predict"
-        if(_request.method() == "POST" && _request.path() == "/detect") {
-            // 创建推理任务，提交到推理任务队列
-            inferenceTask task(_sockfd, _request.getPostPtr());
-            std::future<std::string> result_future = task.resultPromise.get_future();
-            inferenceQueue.push_back(std::move(task));
+        if(_request.method() == "POST") {
+            string path = _request.path();
+            auto postPtr = _request.getPostPtr();
+            if(path == "/detect") {
+                // 创建推理任务，提交到推理任务队列
+                inferenceTask task(_sockfd, postPtr);
+                std::future<std::string> result_future = task.resultPromise.get_future();
+                inferenceQueue.push_back(std::move(task));
 
-            std::string inferenceResult = result_future.get();
+                std::string inferenceResult = result_future.get();
 
-            // 使用带模型推理的 init 接口
-            _response.init(srcDir, _request.path(), _request.isKeepAlive(), 200, inferenceResult);
+                // 使用带模型推理的 init 接口
+                _response.init(srcDir, _request.path(), _request.isKeepAlive(), 200, inferenceResult);
+            }
+            if(path == "/doRegister" || path == "/doLogin") {
+                bool isLogin = (path == "/doLogin"); // 如果是登录页面，isLogin 设置为 true
+                // 验证用户的用户名和密码
+                bool result = userVerify(postPtr->field["username"].data(), postPtr->field["password"].data(), isLogin);
+
+                neb::CJsonObject jsonObj;
+                jsonObj.Add(isLogin ? "login" : "register", result, result);
+
+                _response.init(srcDir, _request.path(), _request.isKeepAlive(), 200, jsonObj.ToString());
+            }
         }
+
         else {  // 静态资源
             // 如果解析成功，根据请求生成响应，状态码设为 200
             _response.init(srcDir, _request.path(), _request.isKeepAlive(), 200); 
@@ -179,4 +194,79 @@ bool HttpConn::process() {
     }
     LOG_DEBUG("filesize:%d, iovCnt: %d, Bytes to write: %d", _response.fileLen() , _iovCnt, toWriteBytes());
     return true;
+}
+
+
+bool HttpConn::userVerify(const char* name, const char* pwd, bool isLogin) {
+    if(name == "" || pwd == "") return false;
+    LOG_INFO("Verify name:%s pwd:%s", name, pwd);
+    
+    // 利用 RAII 机制从数据库连接池获取一个连接，保证函数退出时自动归还连接
+    MYSQL* sql;
+    SqlConnRAII(&sql, SqlConnPool::instance());
+    assert(sql);
+
+    bool flag = false; // 标记用户验证是否成功
+    unsigned int j = 0;
+    char order[256] = {0};
+    MYSQL_FIELD *fields = nullptr;
+    MYSQL_RES *res = nullptr;
+
+    // 注册时，默认认为可以注册（flag 为 true），但如果查询到用户存在则置为 false
+    if(!isLogin) flag = true;
+    
+    // 构造查询语句：根据用户名查找对应的用户记录
+    snprintf(order, 256, "SELECT username, password FROM user WHERE username='%s' LIMIT 1", name);
+    LOG_DEBUG("%s", order);
+
+    // 执行查询操作
+    if(mysql_query(sql, order)) {
+        // 查询失败时，释放结果集并返回 false
+        mysql_free_result(res);
+        return false;
+    }
+    
+    // 获取查询结果集
+    res = mysql_store_result(sql);
+    j = mysql_num_fields(res);
+    fields = mysql_fetch_fields(res);
+
+    // 遍历结果集（通常最多只有一条记录，因为使用了 LIMIT 1）
+    while(MYSQL_ROW row = mysql_fetch_row(res)) {
+        LOG_DEBUG("MYSQL ROW: %s %s", row[0], row[1]);
+        string password(row[1]);
+        if(isLogin) { // 登录模式下，比较密码是否匹配
+            if(pwd == password)
+                flag = true;
+            else {
+                flag = false;
+                LOG_INFO("pwd error!");
+            }
+        }
+        else { // 注册模式下，如果查询到记录，说明用户名已存在，不允许注册
+            flag = false;
+            LOG_INFO("user used!");
+        }
+    }
+    
+    // 释放查询结果资源，防止内存泄漏
+    mysql_free_result(res);
+
+    // 如果是注册模式且用户名未被使用，则进行用户注册（插入新用户记录）
+    if(!isLogin && flag == true) {
+        LOG_DEBUG("register!");
+        memset(order, 0, sizeof(order));
+        snprintf(order, 256, "INSERT INTO user(username, password) VALUES('%s', '%s')", name, pwd);
+        LOG_DEBUG("%s", order);
+        if(mysql_query(sql, order)) {
+            LOG_DEBUG("Insert error!");
+            flag = false;
+        }
+        // 注意：此处无论插入成功与否，flag 最终都会被置为 true，
+        // 这可能需要进一步调整以确保插入失败时返回 false。
+        flag = true;
+    }
+    
+    LOG_DEBUG("userVerify success!");
+    return flag;
 }
