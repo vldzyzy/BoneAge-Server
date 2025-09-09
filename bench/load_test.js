@@ -2,7 +2,7 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 
 export const options = {
-  vus: 1000,
+  vus: 10000,
   duration: '1m',
   thresholds: {
     'http_req_duration': ['p(95)<500'],
@@ -22,5 +22,5 @@ export default function () {
     'content type is text/html': (r) => r.headers['Content-Type'].startsWith('text/html'),
   });
 
-  sleep(0.5);
+  sleep(1);
 }
