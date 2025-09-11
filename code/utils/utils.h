@@ -2,10 +2,10 @@
 
 #include <vector>
 #include <opencv2/opencv.hpp>
-#include <nn/yolo11_detector.h>
+#include <nn/detect.h>
 
 namespace utils {
 
-void DrawBoxes(cv::Mat& image, const std::vector<DetectionResult>& results);
+void DrawBoxes(cv::Mat& image, const std::vector<nn::DetectionResult>& results);
 
 }

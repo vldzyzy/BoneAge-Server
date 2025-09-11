@@ -2,7 +2,7 @@
 
 namespace utils {
 
-void DrawBoxes(cv::Mat& image, const std::vector<DetectionResult>& results) {
+void DrawBoxes(cv::Mat& image, const std::vector<nn::DetectionResult>& results) {
     // 品红
     const cv::Scalar color = cv::Scalar(255, 0, 255);
     for (const auto& obj : results) {

@@ -7,7 +7,8 @@
 struct Config {
     std::string server_ip ;
     int port;
-    int num_threads;
+    int num_io_threads;
+    int num_infer_threads;
 
     std::string static_root_path;
 

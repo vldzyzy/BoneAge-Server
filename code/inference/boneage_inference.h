@@ -38,7 +38,7 @@ public:
         return instance;
     }
 
-    void Init(const std::string& detection_model_path,
+    void Init(size_t thread_count, const std::string& detection_model_path,
               const std::string& classification_model_path);
     
     void Shutdown();
@@ -62,7 +62,7 @@ private:
     std::condition_variable request_cv_;
 
     static constexpr size_t kMaxInferenceBatchSize = 1;
-    static constexpr size_t kMaxRequestQueueSize = 100;
+    static constexpr size_t kMaxRequestQueueSize = 1000;
 };
 
 }

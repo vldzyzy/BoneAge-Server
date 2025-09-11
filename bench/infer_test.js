@@ -2,16 +2,16 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 
 export const options = {
-  vus: 100,
+  vus: 233,
   duration: '1m',
   thresholds: {
-    'http_req_duration': ['p(95)<10000'],
+    'http_req_duration': ['p(95)<5000'],
     'http_req_failed': ['rate<0.01'],
     'checks{check:status is 200}': ['rate>0.99'],
   },
 };
 
-const imageFile = open('../tests/images/f10.6.jpg', 'b');
+const imageFile = open('../tests/images/hand/f10.6.jpg', 'b');
 
 const API_URL = 'http://127.0.0.1:80/predict';
 

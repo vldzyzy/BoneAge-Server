@@ -2,9 +2,9 @@
 #include <vector>
 #include <string>
 #include <filesystem>
-#include "nn/yolo11_detector.h"
-#include "onnxruntime_c_api.h"
+#include "nn/detect.h"
 #include "utils/utils.h"
+#include "logging/logger.h"
 
 namespace fs = std::filesystem;
 
@@ -40,14 +40,14 @@ std::vector<cv::Mat> loadImagesFromFolder(const std::string& folderPath) {
             cv::Mat img = cv::imread(entry.path().string());
             if (!img.empty()) {
                 images.push_back(img);
-                std::cout << "Loaded image: " << entry.path() << " (" << img.cols << "x" << img.rows << ")" << std::endl;
+                LOG_DEBUG("Loaded image: {} ({}x{})", entry.path().string(), img.cols, img.rows);
             } else {
                 std::cerr << "Warning: Could not load image: " << entry.path() << std::endl;
             }
         }
     }
     
-    std::cout << "Successfully loaded " << images.size() << " images from folder." << std::endl;
+    LOG_DEBUG("Successfully loaded {} images from folder.", images.size());
     return images;
 }
 
@@ -63,28 +63,26 @@ std::vector<std::vector<cv::Mat>> splitIntoBatches(const std::vector<cv::Mat>& i
 }
 
 int main() {
+    logging::InitConsole(logging::LogLevel::Debug);
     // 模型路径和图片文件夹路径
     std::string modelPath = "/workspace/BoneAge-Server/models/yolo11m_detect.onnx";
     std::string imageFolder = "/workspace/BoneAge-Server/tests/images";
-    std::vector<int> testBatchSizes = {1, 2, 4};  // 要测试的批次大小列表
+    std::vector<int> testBatchSizes = {1, 8};  // 要测试的批次大小列表
 
-    auto env = std::make_shared<Ort::Env>(ORT_LOGGING_LEVEL_VERBOSE, "yolo_batch_test");
-    YOLO11Detector::Options opt;
-    opt.env = env;
-    opt.model_path = modelPath;
-    YOLO11Detector yolo11(opt);
+    auto env = std::make_shared<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "yolo_batch_test");
+    nn::YOLO11Detector yolo11(env, modelPath, true, {640, 640}, {1, 8});
 
-    // 加载所有图片（共15张）
+    // 加载所有图片（共16张）
     std::vector<cv::Mat> images = loadImagesFromFolder(imageFolder);
     if (images.empty()) {
         std::cerr << "FATAL: No valid images found in folder." << std::endl;
         return 1;
     }
-    std::cout << "INFO: Loaded " << images.size() << " images for testing." << std::endl;
+    LOG_DEBUG("INFO: Loaded {} images for testing.", images.size());
 
     // 遍历测试不同批次大小
     for (int batchSize : testBatchSizes) {
-        std::cout << "\n===== Testing batch size: " << batchSize << " =====" << std::endl;
+        LOG_DEBUG("\n===== Testing batch size: {} =====", batchSize);
         
         // 创建批次输出目录（避免结果混淆）
         std::string outputDir = "batch_" + std::to_string(batchSize) + "_results/";
@@ -92,14 +90,13 @@ int main() {
 
         // 分割图片为当前批次大小的子批次
         auto batches = splitIntoBatches(images, batchSize);
-        std::cout << "INFO: Split into " << batches.size() << " batches (last batch may be smaller)." << std::endl;
+        LOG_DEBUG("INFO: Split into {} batches (last batch may be smaller).", batches.size());
 
         // 逐批次推理并处理结果
         size_t totalProcessed = 0;
         for (size_t b = 0; b < batches.size(); ++b) {
             const auto& batch = batches[b];
-            std::cout << "INFO: Processing batch " << (b + 1) << "/" << batches.size() 
-                      << " (images: " << batch.size() << ")" << std::endl;
+            LOG_DEBUG("INFO: Processing batch {}/{} (images: {})", b + 1, batches.size(), batch.size());
 
             // 执行批次推理
             auto results = yolo11.Detect(batch);
@@ -119,7 +116,7 @@ int main() {
                 // 文件名格式：{输出目录}/result_{总序号}.jpg
                 std::string outputFilename = outputDir + "result_" + std::to_string(totalProcessed + i) + ".jpg";
                 if (cv::imwrite(outputFilename, resultImg)) {
-                    std::cout << "SUCCESS: Saved to " << outputFilename << std::endl;
+                    LOG_DEBUG("SUCCESS: Saved to {}", outputFilename);
                 } else {
                     std::cerr << "WARNING: Failed to save " << outputFilename << std::endl;
                 }
@@ -127,7 +124,7 @@ int main() {
             totalProcessed += batch.size();
         }
 
-        std::cout << "===== Finished batch size: " << batchSize << " (total processed: " << totalProcessed << ") =====" << std::endl;
+        LOG_DEBUG("===== Finished batch size: {} (total processed: {}) =====", batchSize, totalProcessed);
     }
 
     return 0;

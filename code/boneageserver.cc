@@ -24,8 +24,9 @@ int main(int argc, char** argv) {
     Config config;
 
     app.add_option("--ip", config.server_ip, "IP address the server listens on");
-    app.add_option("-p,--port", config.port, "Port the server listens on");
-    app.add_option("-t,--threads", config.num_threads, "Number of IO threads");
+    app.add_option("--port", config.port, "Port the server listens on");
+    app.add_option("--io-threads", config.num_io_threads, "Number of IO threads");
+    app.add_option("--infer-threads", config.num_infer_threads, "Number of infer threads");
 
     app.add_option("--static-dir", config.static_root_path, "Path to static files directory");
     
@@ -64,25 +65,26 @@ int main(int argc, char** argv) {
 
     logging::Init(config.log_path, config.log_level);
     LOG_INFO("Server configuration loaded successfully. "
-         "IP: {}, Port: {}, IO Threads: {}, static dir: {}"
+         "IP: {}, Port: {}, IO Threads: {}, Infer Threads: {}, Static Dir: {}"
          "YOLO Model: {}, Classification Model: {}, "
          "Log Path: {}, Log Level: {}",
          config.server_ip,
          config.port,
-         config.num_threads,
+         config.num_io_threads,
+         config.num_infer_threads,
          config.static_root_path,
          config.yolo_model_path,
          config.cls_model_path,
          config.log_path,
          log_level_str);
 
-    INFERENCER.Init(config.yolo_model_path, config.cls_model_path);
+    INFERENCER.Init(config.num_infer_threads, config.yolo_model_path, config.cls_model_path);
     LOG_INFO("Inference engine initialized successfully.");
 
     net::InetAddress listen_addr(config.server_ip, config.port);
     http::HttpApplication http_app(std::move(listen_addr), config.static_root_path, "bone_age");
 
-    http_app.SetThreadNum(config.num_threads);
+    http_app.SetThreadNum(config.num_io_threads);
 
     LOG_INFO("Server listening...");
     http_app.Start();

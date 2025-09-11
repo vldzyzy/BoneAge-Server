@@ -6,9 +6,13 @@
 #include <stdexcept>
 #include <algorithm> // for std::transform
 #include <unordered_set>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
+#include <thread>
 #include "inference/boneage_inference.h"
+#include "logging/logger.h"
 
-// C++17 a.k.a. std::filesystem
 namespace fs = std::filesystem;
 
 /**
@@ -101,9 +105,11 @@ std::vector<std::vector<unsigned char>> ReadImagesFromFolder(const fs::path& fol
 // --- 使用示例 ---
 int main() {
     using namespace inference;
-    std::string folder = "/workspace/BoneAge-Server/tests/images";
+    std::string folder = "/workspace/BoneAge-Server/tests/images/hand";
     std::string yolo_model_path = "/workspace/BoneAge-Server/models/yolo11m_detect.onnx";
     std::string cls_model_path = "/workspace/BoneAge-Server/models/bone_maturity_predict.onnx";
+
+    logging::InitConsole();
 
     // --- 1. 准备数据 ---
     auto image_buffers = ReadImagesFromFolder(folder);
@@ -113,55 +119,85 @@ int main() {
     }
     std::cout << "\n成功读取了 " << image_buffers.size() << " 张图片。\n";
 
-    int batch_size = image_buffers.size();
-    std::vector<InferenceTask> tasks;
-    tasks.reserve(batch_size);
-    for (int i = 0; i < batch_size; i++) {
-        tasks.emplace_back(InferenceTask{static_cast<uint64_t>(i), std::move(image_buffers[i])});
-    }
-
-    // --- 2. 初始化并提交任务 ---
+    int image_num = image_buffers.size();
+    
+    // --- 2. 初始化推理器 ---
     auto& inferencer = BoneAgeInferencer::GetInstance();
-    inferencer.Init(yolo_model_path, cls_model_path);
+    inferencer.Init(4, yolo_model_path, cls_model_path);
 
-    for (auto& task : tasks) {
+    // --- 3. 使用回调函数收集结果 ---
+    std::vector<BoneAgeInferencer::InferenceResult> final_results;
+    std::mutex results_mutex;
+    std::condition_variable results_cv;
+    int completed_count = 0;
+
+    auto callback = [&](BoneAgeInferencer::InferenceResult result) {
+        std::lock_guard<std::mutex> lock(results_mutex);
+        final_results.push_back(std::move(result));
+        completed_count++;
+        std::cout << "收到推理结果\n";
+        results_cv.notify_one();
+    };
+
+    std::unique_lock<std::mutex> lock(results_mutex);
+
+    // --- 4. 低负载测试：一张一张间隔提交 ---
+    std::cout << "\n=== 开始低负载测试 ===\n";
+    int low_load_count = std::min(5, (int)image_buffers.size()); // 最多测试5张
+    for (int i = 0; i < low_load_count; i++) {
+        BoneAgeInferencer::InferenceTask task;
+        task.raw_image_data = image_buffers[i]; // 复制数据用于后续高负载测试
+        task.on_complete = callback;
         inferencer.PostInference(std::move(task));
+        std::cout << "提交第 " << (i+1) << " 个低负载任务\n";
+        
+        // 间隔500ms再提交下一个
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
-    std::cout << "所有 " << batch_size << " 个任务已提交。\n";
-
-    // --- 3. 使用 sleep 轮询方式等待并获取结果 ---
-    std::vector<InferenceResult> final_results;
-    final_results.reserve(batch_size);
-
-    std::cout << "开始轮询等待推理结果...\n";
-    while (final_results.size() < batch_size) {
-        // 从推理器获取当前已完成的结果
-        auto completed_tasks = inferencer.GetInferenceResult();
-
-        if (!completed_tasks.empty()) {
-            std::cout << "轮询成功: 收到 " << completed_tasks.size() << " 个新结果。\n";
-            // 将收到的结果合并到最终结果向量中
-            final_results.insert(final_results.end(),
-                                 std::make_move_iterator(completed_tasks.begin()),
-                                 std::make_move_iterator(completed_tasks.end()));
-        } else {
-            // 如果队列为空，主线程“睡”一会儿，避免空转浪费CPU
-            std::cout << "结果队列为空，休眠1s...\n";
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+    
+    // 等待低负载任务完成
+    std::cout << "等待低负载任务完成...\n";
+    results_cv.wait(lock, [&]() { return completed_count >= low_load_count; });
+    std::cout << "低负载测试完成，已完成 " << completed_count << " 个任务\n";
+    
+    // --- 5. 高负载测试：批量快速提交 ---
+     std::cout << "\n=== 开始高负载测试 ===\n";
+     int high_load_count = (int)image_buffers.size() * 3; // 提交3倍数量的任务
+     for (int i = 0; i < high_load_count; i++) {
+         BoneAgeInferencer::InferenceTask task;
+         // 循环使用图像数据
+         task.raw_image_data = image_buffers[i % image_buffers.size()];
+        task.on_complete = callback;
+        inferencer.PostInference(std::move(task));
+        
+        // 每10个任务打印一次进度
+        if ((i + 1) % 10 == 0) {
+            std::cout << "已提交 " << (i + 1) << "/" << high_load_count << " 个高负载任务\n";
         }
     }
+    std::cout << "所有 " << high_load_count << " 个高负载任务已提交。\n";
+    
+    int total_expected = low_load_count + high_load_count;
 
-    // --- 4. 打印并关闭 ---
-    // std::cout << "\n--- 所有推理结果 ---\n";
-    // std::sort(final_results.begin(), final_results.end(), 
-    //           [](const auto& a, const auto& b){ return a.task_id < b.task_id; });
+    // --- 6. 等待所有结果完成 ---
+    std::cout << "等待所有高负载任务完成...\n";
+    results_cv.wait(lock, [&]() { return completed_count >= total_expected; });
+    std::cout << "所有任务完成！总共完成 " << completed_count << " 个任务\n";
 
-    // for (const auto& res : final_results) {
-    //     std::cout << "Task ID: " << res.task_id << "\n";
-    //     std::cout << "JSON: " << res.result_str << std::endl;
-    // }
+    // --- 7. 打印结果并关闭 ---
+     std::cout << "\n--- 推理结果统计 ---\n";
+     std::cout << "低负载任务数: " << low_load_count << "\n";
+     std::cout << "高负载任务数: " << high_load_count << "\n";
+     std::cout << "总完成任务数: " << final_results.size() << "\n";
+    
+    // 只打印前几个结果作为示例
+    int sample_count = std::min(3, (int)final_results.size());
+    std::cout << "\n--- 示例结果 (前" << sample_count << "个) ---\n";
+    for (int i = 0; i < sample_count; i++) {
+        std::cout << "结果 " << (i+1) << ": " << final_results[i].result_str << "\n";
+    }
 
-    INFERENCER.Shutdown();
+    inferencer.Shutdown();
 
     return 0;
 }

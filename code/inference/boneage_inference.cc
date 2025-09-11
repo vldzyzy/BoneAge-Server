@@ -66,8 +66,8 @@ public:
     InferencePipeline(std::shared_ptr<Ort::Env> env, 
                       const std::string& detection_model_path,
                       const std::string& classification_model_path)
-        : detector_(env, detection_model_path, true, {640, 640}),
-          classifier_(env, classification_model_path, true, {112, 112}) 
+        : detector_(env, detection_model_path, true, {640, 640}, {1, 2}),
+          classifier_(env, classification_model_path, true, {224, 224}, {1, 2, 4}) 
     {}
 
     std::vector<HandDetail> inference(const std::vector<cv::Mat>& images) {
@@ -300,7 +300,7 @@ BoneAgeInferencer::BoneAgeInferencer() = default;
 
 BoneAgeInferencer::~BoneAgeInferencer() = default;
 
-void BoneAgeInferencer::Init(const std::string& detection_model_path,
+void BoneAgeInferencer::Init(size_t thread_count, const std::string& detection_model_path,
                                  const std::string& classification_model_path)
 {
     auto env = std::make_shared<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "BoneAgeApp");
@@ -310,10 +310,12 @@ void BoneAgeInferencer::Init(const std::string& detection_model_path,
                                                       classification_model_path);
 
     is_closed_.store(false);
-    task_runner_ = NEW_STRAND_RUNNER(3);
-    POST_TASK(task_runner_, [this]() {
-        Run_();
-    });
+    task_runner_ = NEW_PARALLEL_RUNNER(3, thread_count);
+    for (size_t i = 0; i < thread_count; ++i) {
+        POST_TASK(task_runner_, [this]() {
+            Run_();
+        });
+    }
 }
 
 void BoneAgeInferencer::Shutdown() {
@@ -387,7 +389,7 @@ void BoneAgeInferencer::Run_() {
         }
 
         std::vector<HandDetail> hands_detail = inferencer_->inference(batch_images);
-        LOG_INFO("Inferred {} task", batch_tasks.size());
+        LOG_INFO("thread id: {}, Inferred {} task", std::hash<std::thread::id>{}(std::this_thread::get_id()), batch_tasks.size());
 
         for (size_t i = 0; i < valid_tasks.size(); ++i) {
             InferenceResult result;

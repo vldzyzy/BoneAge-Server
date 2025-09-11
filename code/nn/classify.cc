@@ -14,7 +14,8 @@ MaturityClassifier::MaturityClassifier(
     std::shared_ptr<Ort::Env> env, 
     const std::string& model_path,
     bool use_gpu, 
-    const cv::Size& input_size)
+    const cv::Size& input_size,
+    const std::vector<size_t>& warmup_batch_sizes)
     : env_(env),
       session_(nullptr),
       input_size_(input_size)
@@ -26,7 +27,6 @@ MaturityClassifier::MaturityClassifier(
         cuda_options.device_id = 0;
         session_options.AppendExecutionProvider_CUDA(cuda_options);
     }
-    session_options.DisableMemPattern();
     session_ = Ort::Session(*env_, model_path.c_str(), session_options);
 
     // 获取节点信息
@@ -61,15 +61,26 @@ MaturityClassifier::MaturityClassifier(
     LOG_DEBUG("input category shape: [{}]", fmt::join(category_id_input_dims_, ", "));
 
     // warmup
-    LOG_DEBUG("warmup classify model");
+    if (warmup_batch_sizes.empty()) {
+        Warmup_(1);
+    } else {
+        for (size_t batch_size : warmup_batch_sizes) {
+            Warmup_(batch_size);
+        }
+    }
+    LOG_DEBUG("output tensors shape: [{}]", fmt::join(output_dims_, ", "));
+}
+
+void MaturityClassifier::Warmup_(size_t batch_size) {
+    LOG_DEBUG("warmup with batch size: {}", batch_size);
     auto dummy_image_input_dims = image_input_dims_;
-    dummy_image_input_dims[0] = kMaxBatchSize; // batch = kMaxBatchSize
+    dummy_image_input_dims[0] = batch_size;
     auto dummy_category_input_dims = category_id_input_dims_;
-    dummy_category_input_dims[0] = kMaxBatchSize; // batch = kMaxBatchSize
+    dummy_category_input_dims[0] = batch_size;
 
     size_t dummy_image_size = dummy_image_input_dims[0] * dummy_image_input_dims[1] * dummy_image_input_dims[2] * dummy_image_input_dims[3];
     std::vector<float> dummy_image_input(dummy_image_size, 0.0f);
-    std::vector<int64_t> dummy_category_id_input(kMaxBatchSize, 0);
+    std::vector<int64_t> dummy_category_id_input(batch_size, 0);
 
     Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
     
@@ -81,11 +92,10 @@ MaturityClassifier::MaturityClassifier(
         memory_info, dummy_category_id_input.data(), dummy_category_id_input.size(), dummy_category_input_dims.data(), dummy_category_input_dims.size()
     ));
 
-    const char* input_names[] = {image_input_name_ptr_, category_id_input_name_ptr_};
-    auto dummy_output_tensors = session_.Run(Ort::RunOptions{nullptr}, input_names, dummy_input_tensors.data(), 2, &output_name_ptr_, 1);
-    
+    const char* input_names[] = {image_input_name_str_.c_str(), category_id_input_name_str_.c_str()};
+    const char* output_names[] = {output_name_str_.c_str()};
+    auto dummy_output_tensors = session_.Run(Ort::RunOptions{nullptr}, input_names, dummy_input_tensors.data(), 2, output_names, 1);
     output_dims_ = dummy_output_tensors[0].GetTensorTypeAndShapeInfo().GetShape();
-    LOG_DEBUG("output tensor shape: [{}]", fmt::join(output_dims_, ", "));
 }
 
 void MaturityClassifier::softmax_(std::vector<float>& data) const {
@@ -131,34 +141,14 @@ std::vector<ClassificationResult> MaturityClassifier::Classify(const std::vector
 
     const size_t batch_size = images.size();
 
-    if (batch_size > kMaxBatchSize) {
-        throw std::runtime_error("Input batch size exceeds the maximum configured batch size.");
-    }
-
-    // padding
-    std::vector<cv::Mat> padded_images = images;
-    std::vector<int64_t> padded_category_ids = category_ids;
-
-    if (batch_size < kMaxBatchSize) {
-        cv::Mat dummy_image = cv::Mat::zeros(input_size_, CV_8UC3);
-        int dummy_category_id = 0;
-        
-        padded_images.resize(kMaxBatchSize, dummy_image);
-        padded_category_ids.resize(kMaxBatchSize, dummy_category_id);
-    }
-
     // prepare onnxruntime inputs
-    // cv::Mat image_blob = cv::dnn::blobFromImages(images, 1.0 / 255.0, input_size_, cv::Scalar(), true, false, CV_32F);
-    cv::Mat image_blob = cv::dnn::blobFromImages(padded_images, 1.0 / 255.0, input_size_, cv::Scalar(), true, false, CV_32F);
+    cv::Mat image_blob = cv::dnn::blobFromImages(images, 1.0 / 255.0, input_size_, cv::Scalar(), true, false, CV_32F);
     std::vector<int64_t> batch_image_dims = image_input_dims_;
-    // batch_image_dims[0] = batch_size;
-    batch_image_dims[0] = kMaxBatchSize;
+    batch_image_dims[0] = batch_size;
 
-    // std::vector<int64_t> category_ids_input = category_ids;
-    std::vector<int64_t> category_ids_input = padded_category_ids;
+    std::vector<int64_t> category_ids_input = category_ids;
     std::vector<int64_t> batch_category_id_dims = category_id_input_dims_;
-    // batch_category_id_dims[0] = batch_size;
-    batch_category_id_dims[0] = kMaxBatchSize;
+    batch_category_id_dims[0] = batch_size;
 
     Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
     std::vector<Ort::Value> input_tensors;
@@ -172,7 +162,11 @@ std::vector<ClassificationResult> MaturityClassifier::Classify(const std::vector
     const char* output_names[] = {output_name_str_.c_str()};
     // run inference
     LOG_DEBUG("running onnxruntime session");
-    auto output_tensors = session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors.data(), 2, output_names, 1);
+    std::vector<Ort::Value> output_tensors;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        output_tensors = session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors.data(), 2, output_names, 1);
+    }
     LOG_DEBUG("onnxruntime session done");
     LOG_DEBUG("running postprocess");
     std::vector<ClassificationResult> batch_results(batch_size);

@@ -16,7 +16,7 @@
 
 namespace nn {
 
-YOLO11Detector::YOLO11Detector(std::shared_ptr<Ort::Env> env, const std::string& model_path, bool use_gpu, const cv::Size& input_size)
+YOLO11Detector::YOLO11Detector(std::shared_ptr<Ort::Env> env, const std::string& model_path, bool use_gpu, const cv::Size& input_size, const std::vector<size_t>& warmup_batch_sizes)
     : env_(env),
       session_(nullptr),
       input_size_(input_size)
@@ -56,23 +56,13 @@ YOLO11Detector::YOLO11Detector(std::shared_ptr<Ort::Env> env, const std::string&
     output_name_str_ = output_name_ptr.get();
     
     // warmup
-    LOG_DEBUG("warmup detect model");
-    auto dummy_input_dims = input_dims_;
-    dummy_input_dims[0] = kMaxBatchSize;
-    size_t dummy_input_size = dummy_input_dims[0] * dummy_input_dims[1] * dummy_input_dims[2] * dummy_input_dims[3];
-    std::vector<float> dummy_input(dummy_input_size, 0.0f);
-    
-    std::vector<Ort::Value> dummy_input_tensors;
-    Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-    dummy_input_tensors.push_back(Ort::Value::CreateTensor<float>(
-        memory_info, dummy_input.data(), dummy_input.size(), dummy_input_dims.data(), dummy_input_dims.size()
-    ));
-
-    const char* input_names[] = {input_name_str_.c_str()};
-    const char* output_names[] = {output_name_str_.c_str()};
-    auto dummy_output_tensors = session_.Run(Ort::RunOptions{nullptr}, input_names, dummy_input_tensors.data(), 1, output_names, 1);
-
-    output_dims_ = dummy_output_tensors[0].GetTensorTypeAndShapeInfo().GetShape();
+    if (warmup_batch_sizes.empty()) {
+        Warmup_(1);
+    } else {
+        for (size_t batch_size : warmup_batch_sizes) {
+            Warmup_(batch_size);
+        }
+    }
     LOG_DEBUG("output tensors shape: [{}]", fmt::join(output_dims_, ", "));
 }
 
@@ -120,14 +110,18 @@ std::vector<std::vector<DetectionResult>> YOLO11Detector::Detect(const std::vect
     ));
     // 有且只有一个输出通道：output_tensors[0].size = [batch_size, num_attributes, num_proposals] = [bs, 7 + 4 = 11, 8400]
     LOG_DEBUG("running onnxruntime session");
-    auto output_tensors = session_.Run(
-        Ort::RunOptions{nullptr},
-        input_names,
-        input_tensors.data(),
-        1,
-        output_names,
-        1
-    );
+    std::vector<Ort::Value> output_tensors;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        output_tensors = session_.Run(
+            Ort::RunOptions{nullptr},
+            input_names,
+            input_tensors.data(),
+            1,
+            output_names,
+            1
+        );
+    }
     LOG_DEBUG("onnxruntime session done");
     LOG_DEBUG("running postprocess");
     std::vector<std::vector<DetectionResult>> batch_results(batch_size);
@@ -228,6 +222,26 @@ std::vector<DetectionResult> YOLO11Detector::Postprocess_(const float* output_da
     }
 
     return results;
+}
+
+void YOLO11Detector::Warmup_(size_t batch_size) {
+    LOG_DEBUG("warmup detect model with batch size: {}", batch_size);
+    auto dummy_input_dims = input_dims_;
+    dummy_input_dims[0] = batch_size;
+    size_t dummy_input_size = dummy_input_dims[0] * dummy_input_dims[1] * dummy_input_dims[2] * dummy_input_dims[3];
+    std::vector<float> dummy_input(dummy_input_size, 0.0f);
+    
+    std::vector<Ort::Value> dummy_input_tensors;
+    Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+    dummy_input_tensors.push_back(Ort::Value::CreateTensor<float>(
+        memory_info, dummy_input.data(), dummy_input.size(), dummy_input_dims.data(), dummy_input_dims.size()
+    ));
+
+    const char* input_names[] = {input_name_str_.c_str()};
+    const char* output_names[] = {output_name_str_.c_str()};
+    auto dummy_output_tensors = session_.Run(Ort::RunOptions{nullptr}, input_names, dummy_input_tensors.data(), 1, output_names, 1);
+
+    output_dims_ = dummy_output_tensors[0].GetTensorTypeAndShapeInfo().GetShape();
 }
 
 }

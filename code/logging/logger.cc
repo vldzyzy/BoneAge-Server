@@ -1,4 +1,5 @@
 #include "logging/logger.h"
+#include "spdlog/sinks/stdout_color_sinks.h"
 
 std::shared_ptr<spdlog::logger> g_logger;
 
@@ -41,6 +42,27 @@ void Init(const std::string& log_dir,
 
     } catch (const spdlog::spdlog_ex& ex) {
         fprintf(stderr, "Log initialization failed: %s\n", ex.what());
+    }
+}
+
+void InitConsole(LogLevel level) {
+    try {
+        auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        
+        g_logger = std::make_shared<spdlog::logger>("console_logger", console_sink);
+
+        spdlog::register_logger(g_logger);
+
+        // [时间][级别] 消息
+        g_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v");
+        
+        g_logger->set_level(toSpdlogLevel(level));
+
+        // 控制台输出立即刷新
+        g_logger->flush_on(spdlog::level::trace);
+
+    } catch (const spdlog::spdlog_ex& ex) {
+        fprintf(stderr, "Console log initialization failed: %s\n", ex.what());
     }
 }
 

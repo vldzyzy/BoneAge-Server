@@ -193,12 +193,72 @@
 #     ${MYSQLCLIENT_INCLUDE_DIRS}
 # )
 
-# ====== yolo ======
+# # ====== yolo ======
+
+# add_executable(test
+#     test_yolo.cc
+#     ${PROJECT_SOURCE_DIR}/code/nn/detect.cc
+#     ${PROJECT_SOURCE_DIR}/code/utils/utils.cc
+#     ${PROJECT_SOURCE_DIR}/code/logging/logger.cc
+# )
+
+# find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs dnn)
+# message(STATUS "Found system OpenCV version: ${OpenCV_VERSION}")
+
+# target_link_libraries(test PRIVATE
+#     onnxruntime
+#     opencv_core
+#     opencv_imgproc
+#     opencv_imgcodecs
+#     opencv_dnn
+#     spdlog::spdlog
+#     fmt::fmt
+# )
+
+# target_include_directories(test PRIVATE
+#     ${PROJECT_SOURCE_DIR}/code
+    
+# )
+
+# # ====== classify ======
+
+# add_executable(test
+#     test_classify.cc
+#     ${PROJECT_SOURCE_DIR}/code/nn/classify.cc
+#     ${PROJECT_SOURCE_DIR}/code/utils/utils.cc
+#     ${PROJECT_SOURCE_DIR}/code/logging/logger.cc
+# )
+
+# find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs dnn)
+# message(STATUS "Found system OpenCV version: ${OpenCV_VERSION}")
+
+# target_link_libraries(test PRIVATE
+#     onnxruntime
+#     opencv_core
+#     opencv_imgproc
+#     opencv_imgcodecs
+#     opencv_dnn
+#     spdlog::spdlog
+#     fmt::fmt
+# )
+
+# target_include_directories(test PRIVATE
+#     ${PROJECT_SOURCE_DIR}/code
+    
+# )
+
+# ====== inference ======
 
 add_executable(test
-    test_yolo.cc
-    ${PROJECT_SOURCE_DIR}/code/nn/yolo11_detector.cc
+    test_inference.cc
+    ${PROJECT_SOURCE_DIR}/code/inference/boneage_inference.cc
+    ${PROJECT_SOURCE_DIR}/code/nn/detect.cc
+    ${PROJECT_SOURCE_DIR}/code/nn/classify.cc
     ${PROJECT_SOURCE_DIR}/code/utils/utils.cc
+    ${PROJECT_SOURCE_DIR}/code/logging/logger.cc
+    ${PROJECT_SOURCE_DIR}/code/context/context.cc 
+    ${PROJECT_SOURCE_DIR}/code/context/executor.cc 
+    ${PROJECT_SOURCE_DIR}/code/context/thread_pool.cc
 )
 
 find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs dnn)
@@ -210,6 +270,9 @@ target_link_libraries(test PRIVATE
     opencv_imgproc
     opencv_imgcodecs
     opencv_dnn
+    spdlog::spdlog
+    fmt::fmt
+    nlohmann_json
 )
 
 target_include_directories(test PRIVATE

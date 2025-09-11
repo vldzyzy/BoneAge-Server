@@ -20,7 +20,8 @@ public:
     MaturityClassifier(std::shared_ptr<Ort::Env> env,
                        const std::string& model_path,
                        bool use_gpu, 
-                       const cv::Size& input_size);
+                       const cv::Size& input_size,
+                       const std::vector<size_t>& warmup_batch_sizes = {});
 
     MaturityClassifier(const MaturityClassifier&) = delete;
     MaturityClassifier& operator=(const MaturityClassifier&) = delete;
@@ -33,10 +34,8 @@ public:
      */
     std::vector<ClassificationResult> Classify(const std::vector<cv::Mat>& images, const std::vector<int64_t>& category_ids);
 
-public:
-    static constexpr size_t kMaxBatchSize = 21;
-
 private:
+    void Warmup_(size_t batch_size);
     cv::Mat Preprocess_(const cv::Mat& image);
     ClassificationResult Postprocess_(const float* output_data, int category_id);
     void softmax_(std::vector<float>& data) const;
@@ -44,6 +43,8 @@ private:
     std::shared_ptr<Ort::Env> env_;
     Ort::Session session_;
     Ort::AllocatorWithDefaultOptions allocator_;
+
+    std::mutex mutex_;
 
     std::string image_input_name_str_;
     std::string category_id_input_name_str_;

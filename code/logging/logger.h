@@ -29,6 +29,8 @@ void Init(const std::string& log_dir,
                  int rotation_hour = 0,
                  int rotation_minute = 0);
 
+void InitConsole(LogLevel level = LogLevel::Info);
+
 inline void SetLevel(LogLevel level) {
     if (g_logger) {
         g_logger->set_level(toSpdlogLevel(level));
