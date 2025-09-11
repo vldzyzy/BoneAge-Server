@@ -11,6 +11,7 @@
     <div class="app-container">
         <header class="app-header">
             <h1>智能骨龄检测-基于RUS-CHN骨龄标准</h1>
+            <button class="btn btn-help" id="helpButton" title="查看拍摄要求">❓ 帮助</button>
         </header>
         
         <div class="app-layout">
@@ -24,7 +25,7 @@
                         <button class="btn btn-primary" id="uploadButton" disabled>上传检测</button>
                         <div id="spinner" class="spinner hidden"></div>
                     </div>
-                    <p class="upload-hint">支持拖拽上传，文件大小限制: 20MB</p>
+                    <p class="upload-hint">支持拖拽上传，文件大小限制: 10MB</p>
                 </div>
                 
                 <!-- 图片显示和标注区域 -->
@@ -102,19 +103,19 @@
                     <div class="detail-item">
                         <label>关节类型:</label>
                         <select id="jointSelect">
-                            <option value="radius">桡骨 (radius)</option>
-                            <option value="ulna">尺骨 (ulna)</option>
-                            <option value="mcpfirst">第一掌骨 (mcpfirst)</option>
-                            <option value="mcpthird">第三掌骨 (mcpthird)</option>
-                            <option value="mcpfifth">第五掌骨 (mcpfifth)</option>
-                            <option value="pipfirst">第一近节指骨 (pipfirst)</option>
-                            <option value="pipthird">第三近节指骨 (pipthird)</option>
-                            <option value="pipfifth">第五近节指骨 (pipfifth)</option>
-                            <option value="mipthird">第三中节指骨 (mipthird)</option>
-                            <option value="mipfifth">第五中节指骨 (mipfifth)</option>
-                            <option value="dipfirst">第一远节指骨 (dipfirst)</option>
-                            <option value="dipthird">第三远节指骨 (dipthird)</option>
-                            <option value="dipfifth">第五远节指骨 (dipfifth)</option>
+                            <option value="radius">桡骨</option>
+                            <option value="ulna">尺骨</option>
+                            <option value="mcpfirst">第一掌骨</option>
+                            <option value="mcpthird">第三掌骨</option>
+                            <option value="mcpfifth">第五掌骨</option>
+                            <option value="pipfirst">第一近节指骨</option>
+                            <option value="pipthird">第三近节指骨</option>
+                            <option value="pipfifth">第五近节指骨</option>
+                            <option value="mipthird">第三中节指骨</option>
+                            <option value="mipfifth">第五中节指骨</option>
+                            <option value="dipfirst">第一远节指骨</option>
+                            <option value="dipthird">第三远节指骨</option>
+                            <option value="dipfifth">第五远节指骨</option>
                         </select>
                     </div>
                     <div class="detail-item">
@@ -132,6 +133,31 @@
                     </div>
                     <button class="btn btn-primary" id="updateBoxButton">更新</button>
                     <button class="btn btn-secondary" id="cancelEditButton">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 帮助模态框 -->
+    <div id="helpModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>帮助</h2>
+                <span class="close" id="closeModal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="help-section">
+                    <h3>X光片体位要求</h3>
+                    <p>四指指向图像上方，腕部位于图像下方，小拇指指向图像左侧，大拇指指向图像右侧</p>
+                </div>
+                
+                
+                <div class="help-section">
+                    <h3>示例图像</h3>
+                    <div class="example-image">
+                        <img src="images/example.webp" alt="标准手部X光片示例" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;">
+                        <p class="image-caption">标准的手部骨龄X光片示例：掌面朝下，拇指朝右，手腕朝下</p>
+                    </div>
                 </div>
             </div>
         </div>

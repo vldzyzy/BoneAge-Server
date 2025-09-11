@@ -32,7 +32,10 @@ const elements = {
     selectedGender: document.getElementById('selectedGender'),
     magnifier: document.getElementById('magnifier'),
     magnifierCanvas: document.getElementById('magnifierCanvas'),
-    magnifierClose: document.getElementById('magnifierClose')
+    magnifierClose: document.getElementById('magnifierClose'),
+    helpButton: document.getElementById('helpButton'),
+    helpModal: document.getElementById('helpModal'),
+    closeModal: document.getElementById('closeModal')
 };
 
 // 画布上下文
@@ -57,7 +60,7 @@ const state = {
 
 // 常量
 const CONFIG = {
-    MAX_FILE_SIZE: 20 * 1024 * 1024, // 20MB
+    MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
     BOX_COLORS: {
         normal: '#2563eb',
         selected: '#dc2626',
@@ -240,6 +243,24 @@ function bindEvents() {
     // 窗口大小变化
     window.addEventListener('resize', debounce(handleResize, 250));
     elements.magnifierClose.addEventListener('click', hideMagnifier);
+    
+    // 帮助按钮事件
+    elements.helpButton.addEventListener('click', showHelpModal);
+    elements.closeModal.addEventListener('click', hideHelpModal);
+    
+    // 点击模态框背景关闭
+    elements.helpModal.addEventListener('click', function(event) {
+        if (event.target === elements.helpModal) {
+            hideHelpModal();
+        }
+    });
+    
+    // ESC键关闭模态框
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && elements.helpModal.style.display === 'block') {
+            hideHelpModal();
+        }
+    });
 }
 
 // 文件选择处理
@@ -281,7 +302,7 @@ function validateAndLoadImage(file) {
     
     // 文件大小检查
     if (file.size > CONFIG.MAX_FILE_SIZE) {
-        showMessage('文件大小超过限制（20MB）', 'error');
+        showMessage('文件大小超过限制（10MB）', 'error');
         return;
     }
 
@@ -1128,5 +1149,18 @@ function drawMagnifierContent(box) {
     // 在画布的边缘内侧1px处绘制，防止边框被裁掉
     ctx.strokeRect(1, 1, drawWidth - 2, drawHeight - 2); 
 }
+
+// 显示帮助模态框
+function showHelpModal() {
+    elements.helpModal.style.display = 'block';
+    document.body.style.overflow = 'hidden'; // 防止背景滚动
+}
+
+// 隐藏帮助模态框
+function hideHelpModal() {
+    elements.helpModal.style.display = 'none';
+    document.body.style.overflow = 'auto'; // 恢复背景滚动
+}
+
 // 初始化应用
 init();
