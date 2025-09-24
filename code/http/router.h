@@ -6,9 +6,13 @@
 #include <unordered_map>
 #include "net/tcpconnection.h"
 #include <initializer_list>
-#include "middleware.h"
 
 namespace http {
+
+using Next = std::function<void()>;
+using Middleware =
+    std::function<void(HttpContext &context,
+                       const net::TcpConnection::Ptr &conn, const Next &next)>;
 
 class Router {
 public:

@@ -7,3 +7,5 @@ log
 ceshi
 config.toml
 *.out
+reports
+.gdbinit

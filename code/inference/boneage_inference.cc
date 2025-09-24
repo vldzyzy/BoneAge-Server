@@ -66,8 +66,8 @@ public:
     InferencePipeline(std::shared_ptr<Ort::Env> env, 
                       const std::string& detection_model_path,
                       const std::string& classification_model_path)
-        : detector_(env, detection_model_path, true, {640, 640}, {1, 2}),
-          classifier_(env, classification_model_path, true, {224, 224}, {1, 2, 4}) 
+        : detector_(env, detection_model_path, true, {640, 640}, {1}),
+          classifier_(env, classification_model_path, true, {112, 112}, {12, 13, 14}) 
     {}
 
     std::vector<HandDetail> inference(const std::vector<cv::Mat>& images) {
@@ -310,8 +310,9 @@ void BoneAgeInferencer::Init(size_t thread_count, const std::string& detection_m
                                                       classification_model_path);
 
     is_closed_.store(false);
-    task_runner_ = NEW_PARALLEL_RUNNER(3, thread_count);
-    for (size_t i = 0; i < thread_count; ++i) {
+    thread_count_ = thread_count;
+    task_runner_ = NEW_PARALLEL_RUNNER(3, thread_count_);
+    for (size_t i = 0; i < thread_count_; ++i) {
         POST_TASK(task_runner_, [this]() {
             Run_();
         });
@@ -345,15 +346,26 @@ void BoneAgeInferencer::Run_() {
             if (is_closed_.load()) {
                 return;
             }
-            int batch_size = std::min(request_queue_.size(), kMaxInferenceBatchSize);
-            for (int i = 0; i < batch_size; i++) {
+            size_t total_task_count = request_queue_.size();
+            size_t batch_size = 1;
+
+            if (total_task_count > thread_count_) {
+                size_t desired_batch_size = (total_task_count + thread_count_ - 1) / thread_count_;
+                if (desired_batch_size > 1) {
+                    batch_size = 1;
+                    while ((batch_size << 1) <= desired_batch_size) {
+                        batch_size <<= 1;
+                    }
+                }
+            }
+            batch_size = std::min({batch_size, (size_t)kMaxInferenceBatchSize, total_task_count});
+
+            for (size_t i = 0; i < batch_size; i++) {
                 batch_tasks.emplace_back(std::move(request_queue_.front()));
                 request_queue_.pop();
             }
             request_cv_.notify_one();
         }   
-        LOG_INFO("Starting inference on {} task", batch_tasks.size());
-
         std::vector<cv::Mat> batch_images;
         std::vector<InferenceTask> valid_tasks; // 成功解码的任务
         batch_images.reserve(batch_tasks.size());

@@ -1,6 +1,5 @@
 #include "http/httpapplication.h"
 #include "http/httpcontext.h"
-#include "http/middleware.h"
 #include "inference/boneage_inference.h"
 #include "net/eventloop.h"
 #include "net/inetaddress.h"
@@ -64,9 +63,10 @@ int main(int argc, char** argv) {
     }
 
     logging::Init(config.log_path, config.log_level);
-    LOG_INFO("Server configuration loaded successfully. "
-         "IP: {}, Port: {}, IO Threads: {}, Infer Threads: {}, Static Dir: {}"
-         "YOLO Model: {}, Classification Model: {}, "
+    LOG_INFO("Server configuration loaded successfully.\n"
+         "IP: {}, Port: {}, IO Threads: {}, Infer Threads: {}\n"
+         "Static Dir: {}\n"
+         "YOLO Model: {}, Classification Model: {}\n"
          "Log Path: {}, Log Level: {}",
          config.server_ip,
          config.port,

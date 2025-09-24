@@ -55,6 +55,7 @@ private:
     std::unique_ptr<InferencePipeline> inferencer_;
 
     ctx::TaskRunnerTag task_runner_;
+    size_t thread_count_;
     std::atomic<bool> is_closed_{true};
 
     std::queue<InferenceTask> request_queue_; // 接收推理请求

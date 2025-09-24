@@ -1,38 +1,38 @@
 #pragma once
+#include "net/buffer.h"
 #include <string>
 #include <unordered_map>
-#include "net/buffer.h"
 
 namespace http {
 
 class HttpResponse {
 public:
-    HttpResponse() { Reset(); }
-    
-    void Reset();
+  HttpResponse() { Reset(); }
 
-    void SetStatusCode(int code);
+  void Reset();
 
-    void SetStatusMessage(std::string message);
+  void SetStatusCode(int code);
 
-    void SetKeepAlive(bool on);
+  void SetStatusMessage(std::string message);
 
-    void SetContentType(std::string content_type);
+  void SetKeepAlive(bool on);
 
-    void SetHeader(std::string key, std::string value);
+  void SetContentType(std::string content_type);
 
-    void SetBody(std::string body);
+  void SetHeader(std::string key, std::string value);
 
-    void AppendToBuffer(net::Buffer& buffer);
+  void SetBody(std::string body);
 
-    bool IsKeepAlive() const { return is_keep_alive_; }
+  void AppendToBuffer(net::Buffer &buffer);
+
+  bool IsKeepAlive() const { return is_keep_alive_; }
 
 private:
-    int status_code_;
-    std::string status_message_;
-    bool is_keep_alive_;
-    std::unordered_map<std::string, std::string> headers_;
-    std::string body_;
+  int status_code_;
+  std::string status_message_;
+  bool is_keep_alive_;
+  std::unordered_map<std::string, std::string> headers_;
+  std::string body_;
 };
 
-}
+} // namespace http

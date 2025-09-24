@@ -1,5 +1,5 @@
 set(NET_SRCS net/buffer.cc net/channel.cc net/acceptor.cc net/epoller.cc net/eventloop.cc net/eventloopthread.cc net/eventloopthreadpool.cc net/inetaddress.cc net/socket.cc net/tcpconnection.cc net/tcpserver.cc)
-set(HTTP_SRCS http/httpapplication.cc http/httprequest.cc http/httpresponse.cc http/httpcontext.cc http/middleware.cc http/router.cc)
+set(HTTP_SRCS http/httpapplication.cc http/httprequest.cc http/httpresponse.cc http/router.cc)
 set(LOG_SRCS logging/logger.cc)
 set(NN_SRCS nn/detect.cc nn/classify.cc)
 set(CONTEXT_SRCS context/context.cc context/executor.cc context/thread_pool.cc)
