@@ -7,8 +7,8 @@
         "generator": "Ninja",
         "cacheVariables": {
           "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-          "CMAKE_C_COMPILER": "clang",
-          "CMAKE_CXX_COMPILER": "clang++",
+          "CMAKE_C_COMPILER": "gcc",
+          "CMAKE_CXX_COMPILER": "g++",
           "ENABLE_ASAN": "OFF"
         }
       },

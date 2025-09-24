@@ -34,6 +34,9 @@ set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 # ====== thread ======
 find_package(Threads REQUIRED)
 
+# ====== TBB ======
+find_package(TBB REQUIRED)
+
 # ====== opencv ======
 find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs dnn)
 message(STATUS "Found system OpenCV version: ${OpenCV_VERSION}")
@@ -120,6 +123,7 @@ target_link_libraries(bone_age_server
         spdlog::spdlog
         CLI11::CLI11
         ${MYSQLCLIENT_LIBS}
+        TBB::tbb
 )
 
 target_include_directories(bone_age_server

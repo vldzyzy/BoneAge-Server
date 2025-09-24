@@ -23,6 +23,9 @@ YOLO11Detector::YOLO11Detector(std::shared_ptr<Ort::Env> env, const std::string&
 {
     LOG_DEBUG("initializing detect model");
     Ort::SessionOptions session_options;
+    session_options.SetIntraOpNumThreads(1);
+    session_options.SetInterOpNumThreads(1);
+    session_options.SetExecutionMode(ORT_SEQUENTIAL);
     if (use_gpu) {
         OrtCUDAProviderOptions cuda_options;
         cuda_options.device_id = 0;
